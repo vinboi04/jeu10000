@@ -53,6 +53,63 @@ body {
 .stats-cell-value.purple { color: #c060ff; }
 .stats-footer { text-align: center; padding: 8px; font-size: 10px; color: #444; }
 
+/* ── STATS TABLE ── */
+.stats-body {
+  flex: 1;
+  overflow: auto;          /* scroll X ET Y */
+  -webkit-overflow-scrolling: touch;
+  padding: 0;
+}
+.stats-table {
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 11px;
+  /* pas de width:100% → la table prend sa taille naturelle, le wrapper scrolle */
+}
+.stats-table th, .stats-table td {
+  white-space: nowrap;
+  padding: 6px 8px;
+  border-right: 1px solid #1e3a6e;
+  border-bottom: 1px solid #1e2a45;
+  text-align: center;
+}
+/* Header sticky top */
+.stats-table thead th {
+  background: #0f3460; color: #aac;
+  font-size: 10px; cursor: pointer;
+  position: sticky; top: 0; z-index: 10;
+  border-top: 1px solid #1e3a6e;
+}
+/* Colonne Joueur sticky left */
+.stats-table th:first-child,
+.stats-table td:first-child {
+  position: sticky; left: 0; z-index: 5;
+  text-align: left;
+  min-width: 80px;
+  border-left: 1px solid #1e3a6e;
+  border-right: 2px solid #e94560;  /* séparateur visible */
+}
+.stats-table thead th:first-child { z-index: 15; } /* coin sticky */
+.stats-table th:first-child { background: #0f3460; }
+.stats-table td:first-child { background: #16213e; color: #fff; font-weight: bold; }
+
+/* largeurs gérées via JS inline styles */
+
+.stats-table th.sort-desc::after { content: ' ▼'; color: #e94560; }
+.stats-table th.sort-asc::after  { content: ' ▲'; color: #e94560; }
+
+.stats-table td { background: #13192b; color: #ccc; }
+.stats-table tr.rank-1 td { background: #1a1800; }
+.stats-table tr.rank-2 td { background: #151515; }
+.stats-table tr.rank-3 td { background: #120d08; }
+.stats-table tr.rank-1 td:first-child { background: #2a2400; }
+.stats-table tr.rank-2 td:first-child { background: #1e1e1e; }
+.stats-table tr.rank-3 td:first-child { background: #1a1008; }
+.stats-table td.td-gold   { color: #ffd700; font-weight: bold; }
+.stats-table td.td-orange { color: #ffaa00; }
+.stats-table td.td-purple { color: #c060ff; }
+.stats-table td.td-red    { color: #ff5555; }
+
 /* ── HEART RAIN ── */
 .heart {
   position: absolute; top: -60px; font-size: 28px;
@@ -83,22 +140,55 @@ body {
 /* ── SETUP ── */
 #setup-screen {
   flex: 1; display: flex; flex-direction: column;
-  align-items: center; justify-content: center;
-  padding: 20px; gap: 16px;
+  align-items: center;
+  padding: 20px 20px 0; gap: 12px;
+  overflow: hidden;
 }
-#setup-screen h1 { font-size: 32px; color: #e94560; letter-spacing: 4px; }
-#setup-screen p { font-size: 13px; color: #888; }
-.player-inputs { display: flex; flex-direction: column; gap: 8px; width: 100%; max-width: 280px; }
-.player-row { display: flex; flex-direction: column; gap: 4px; background: #16213e; border: 1px solid #0f3460; border-radius: 10px; padding: 8px; position: relative; }
+#setup-screen h1 { font-size: 32px; color: #e94560; letter-spacing: 4px; flex-shrink: 0; }
+#setup-screen p { font-size: 13px; color: #888; flex-shrink: 0; }
+.setup-scroll {
+  flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch;
+  width: 100%; display: flex; flex-direction: column; align-items: center;
+  gap: 12px; padding-bottom: 20px;
+}
+.player-inputs { display: flex; flex-direction: column; gap: 8px; width: 100%; max-width: 300px; }
+.player-row {
+  display: flex; flex-direction: column; gap: 4px;
+  background: #16213e; border: 1px solid #0f3460; border-radius: 10px;
+  padding: 8px 8px 8px 8px; position: relative;
+}
+.player-row-top { display: flex; gap: 5px; align-items: center; }
 .player-row input {
-  width: 100%; background: #0f3460; border: 1px solid #1e3a6e;
+  flex: 1; background: #0f3460; border: 1px solid #1e3a6e;
   color: #fff; font-size: 15px; padding: 7px 10px;
-  border-radius: 6px; font-family: 'Courier New', monospace;
+  border-radius: 6px; font-family: 'Courier New', monospace; min-width: 0;
 }
 .player-row input:focus { outline: none; border-color: #e94560; }
-.btn-add { background: #0f3460; color: #e94560; border: 2px solid #e94560; border-radius: 8px; padding: 8px 14px; font-size: 18px; cursor: pointer; }
-.btn-remove { position: absolute; top: 6px; right: 6px; background: transparent; color: #555; border: 1px solid #333; border-radius: 6px; padding: 2px 7px; font-size: 12px; cursor: pointer; }
-.btn-start { background: #e94560; color: #fff; border: none; border-radius: 10px; padding: 14px 40px; font-size: 18px; font-weight: bold; cursor: pointer; letter-spacing: 2px; margin-top: 8px; }
+.btn-pick {
+  background: #0f3460; color: #7ec8a0; border: 1px solid #2a5a4a;
+  border-radius: 6px; padding: 7px 9px; font-size: 14px; cursor: pointer;
+  flex-shrink: 0; line-height: 1;
+}
+.btn-remove {
+  background: transparent; color: #555; border: 1px solid #333;
+  border-radius: 6px; padding: 7px 9px; font-size: 12px; cursor: pointer; flex-shrink: 0;
+}
+.player-dropdown {
+  display: none; position: absolute; top: calc(100% + 4px); left: 0; right: 0;
+  background: #0f2040; border: 1px solid #e94560; border-radius: 8px;
+  z-index: 50; overflow: hidden; box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+}
+.player-dropdown.open { display: block; }
+.player-dropdown-item {
+  padding: 9px 12px; font-size: 13px; color: #ddd; cursor: pointer;
+  border-bottom: 1px solid #1e3060; display: flex; justify-content: space-between; align-items: center;
+}
+.player-dropdown-item:last-child { border-bottom: none; }
+.player-dropdown-item:active { background: #e94560; color: #fff; }
+.player-dropdown-item span.pct { font-size: 11px; color: #888; }
+.player-dropdown-empty { padding: 10px 12px; font-size: 12px; color: #555; text-align: center; }
+.btn-add { background: #0f3460; color: #e94560; border: 2px solid #e94560; border-radius: 8px; padding: 8px 14px; font-size: 18px; cursor: pointer; flex-shrink: 0; }
+.btn-start { background: #e94560; color: #fff; border: none; border-radius: 10px; padding: 14px 40px; font-size: 18px; font-weight: bold; cursor: pointer; letter-spacing: 2px; flex-shrink: 0; }
 
 /* ── GAME ── */
 #game-screen { flex: 1; display: none; flex-direction: column; overflow: hidden; }
@@ -190,7 +280,7 @@ thead { position: sticky; top: 0; z-index: 10; }
 .btn-new-game { background: #e94560; color: #fff; border: none; border-radius: 10px; padding: 12px 30px; font-size: 16px; cursor: pointer; }
 
 /* Toast */
-#toast { position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%); background: #e94560; color: #fff; padding: 10px 20px; border-radius: 20px; font-size: 14px; font-weight: bold; z-index: 200; opacity: 0; transition: opacity 0.3s; pointer-events: none; text-align: center; max-width: 80vw; }
+#toast { position: fixed; top: 54px; left: 50%; transform: translateX(-50%); background: #e94560; color: #fff; padding: 10px 20px; border-radius: 20px; font-size: 14px; font-weight: bold; z-index: 200; opacity: 0; transition: opacity 0.3s; pointer-events: none; text-align: center; max-width: 80vw; box-shadow: 0 4px 16px rgba(0,0,0,0.5); }
 </style>
 </head>
 <body>
@@ -199,13 +289,39 @@ thead { position: sticky; top: 0; z-index: 10; }
 <div id="setup-screen">
   <h1>🎲 10 000</h1>
   <p>Entrez les noms des joueurs</p>
-  <div class="player-inputs" id="player-inputs">
-    <div class="player-row"><input type="text" placeholder="Nom définitif" maxlength="12"><input type="text" placeholder="Alias (optionnel)" maxlength="10"><button class="btn-remove" onclick="removePlayer(this)">✕</button></div>
-    <div class="player-row"><input type="text" placeholder="Nom définitif" maxlength="12"><input type="text" placeholder="Alias (optionnel)" maxlength="10"><button class="btn-remove" onclick="removePlayer(this)">✕</button></div>
-    <div class="player-row"><input type="text" placeholder="Nom définitif" maxlength="12"><input type="text" placeholder="Alias (optionnel)" maxlength="10"><button class="btn-remove" onclick="removePlayer(this)">✕</button></div>
+  <div class="setup-scroll">
+    <div class="player-inputs" id="player-inputs">
+      <div class="player-row">
+        <div class="player-row-top">
+          <input type="text" placeholder="Nom définitif" maxlength="12">
+          <button class="btn-pick" onclick="toggleDropdown(this)" title="Choisir un joueur connu">▾</button>
+          <button class="btn-remove" onclick="removePlayer(this)">✕</button>
+        </div>
+        <input type="text" placeholder="Alias (optionnel)" maxlength="10">
+        <div class="player-dropdown"></div>
+      </div>
+      <div class="player-row">
+        <div class="player-row-top">
+          <input type="text" placeholder="Nom définitif" maxlength="12">
+          <button class="btn-pick" onclick="toggleDropdown(this)" title="Choisir un joueur connu">▾</button>
+          <button class="btn-remove" onclick="removePlayer(this)">✕</button>
+        </div>
+        <input type="text" placeholder="Alias (optionnel)" maxlength="10">
+        <div class="player-dropdown"></div>
+      </div>
+      <div class="player-row">
+        <div class="player-row-top">
+          <input type="text" placeholder="Nom définitif" maxlength="12">
+          <button class="btn-pick" onclick="toggleDropdown(this)" title="Choisir un joueur connu">▾</button>
+          <button class="btn-remove" onclick="removePlayer(this)">✕</button>
+        </div>
+        <input type="text" placeholder="Alias (optionnel)" maxlength="10">
+        <div class="player-dropdown"></div>
+      </div>
+    </div>
+    <button class="btn-add" onclick="addPlayer()">+ Joueur</button>
+    <button class="btn-start" onclick="startGame()">DÉBUT DE PARTIE</button>
   </div>
-  <button class="btn-add" onclick="addPlayer()">+ Joueur</button>
-  <button class="btn-start" onclick="startGame()">DÉBUT DE PARTIE</button>
 </div>
 
 <!-- GAME -->
@@ -260,7 +376,7 @@ thead { position: sticky; top: 0; z-index: 10; }
     <h2>📊 STATS</h2>
     <button class="btn-close-stats" onclick="closeStats()">✕ Fermer</button>
   </div>
-  <div class="stats-body" id="stats-body"></div>
+  <div class="stats-body"><table class="stats-table" id="stats-table"><thead id="stats-thead"></thead><tbody id="stats-tbody"></tbody></table></div>
   <div class="stats-footer">
     <button onclick="clearAllStats()" style="background:#3a0808;color:#ff5555;border:1px solid #ff5555;border-radius:8px;padding:8px 16px;font-size:12px;cursor:pointer;margin-bottom:6px">🗑 Effacer toutes les stats et joueurs</button><br>
     <span style="font-size:10px;color:#444">Stats sauvegardées sur cet appareil</span>
@@ -343,14 +459,24 @@ let history = [];
 // ═══════════════════════════════════════════
 // SETUP
 // ═══════════════════════════════════════════
+function makePlayerRow() {
+  const div = document.createElement('div');
+  div.className = 'player-row';
+  div.innerHTML = `
+    <div class="player-row-top">
+      <input type="text" placeholder="Nom définitif" maxlength="12">
+      <button class="btn-pick" onclick="toggleDropdown(this)" title="Choisir un joueur connu">▾</button>
+      <button class="btn-remove" onclick="removePlayer(this)">✕</button>
+    </div>
+    <input type="text" placeholder="Alias (optionnel)" maxlength="10">
+    <div class="player-dropdown"></div>`;
+  return div;
+}
+
 function addPlayer() {
   const c = document.getElementById('player-inputs');
   if (c.children.length >= 8) return;
-  const n = c.children.length + 1;
-  const div = document.createElement('div');
-  div.className = 'player-row';
-  div.innerHTML = `<input type="text" placeholder="Nom définitif" maxlength="12"><input type="text" placeholder="Alias (optionnel)" maxlength="10"><button class="btn-remove" onclick="removePlayer(this)">✕</button>`;
-  c.appendChild(div);
+  c.appendChild(makePlayerRow());
 }
 
 function removePlayer(btn) {
@@ -359,6 +485,53 @@ function removePlayer(btn) {
   if (rows.length <= 2) { showToast('Minimum 2 joueurs'); return; }
   btn.closest('.player-row').remove();
 }
+
+// Ferme tous les dropdowns sauf celui passé en param
+function closeAllDropdowns(except) {
+  document.querySelectorAll('.player-dropdown.open').forEach(d => {
+    if (d !== except) d.classList.remove('open');
+  });
+}
+
+function toggleDropdown(btn) {
+  const row = btn.closest('.player-row');
+  const dd = row.querySelector('.player-dropdown');
+  const isOpen = dd.classList.contains('open');
+  closeAllDropdowns(null);
+  if (isOpen) return;
+
+  // Construire la liste depuis localStorage
+  const stats = loadStats();
+  const known = Object.values(stats)
+    .filter(s => s.displayName)
+    .sort((a, b) => (b.games || 0) - (a.games || 0));
+
+  dd.innerHTML = '';
+  if (known.length === 0) {
+    dd.innerHTML = '<div class="player-dropdown-empty">Aucun joueur enregistré</div>';
+  } else {
+    known.forEach(s => {
+      const item = document.createElement('div');
+      item.className = 'player-dropdown-item';
+      const pct = s.games > 0 ? Math.round((s.wins || 0) / s.games * 100) : 0;
+      item.innerHTML = `<span>${s.displayName}</span><span class="pct">${s.wins || 0}🏆 ${pct}%</span>`;
+      item.onclick = () => pickPlayer(row, s.displayName);
+      dd.appendChild(item);
+    });
+  }
+  dd.classList.add('open');
+}
+
+function pickPlayer(row, name) {
+  const inputs = row.querySelectorAll('input');
+  inputs[0].value = name;  // Nom définitif
+  row.querySelector('.player-dropdown').classList.remove('open');
+}
+
+// Fermer dropdown si clic ailleurs
+document.addEventListener('click', e => {
+  if (!e.target.closest('.player-row')) closeAllDropdowns(null);
+});
 
 function startGame() {
   const rows = document.querySelectorAll('#player-inputs .player-row');
@@ -478,13 +651,22 @@ function renderTable() {
 
     totalEl.textContent = p.total.toLocaleString('fr-FR');
     totalEl.className = i === currentPlayer ? 'active' : '';
+    totalEl.style.fontWeight = 'bold';
+    totalEl.style.fontSize = '15px';
     // Stop blink after next player's turn
     if (p.blinking && p.blinkUntilTurn !== undefined && currentTurn > p.blinkUntilTurn) {
       p.blinking = false;
     }
 
+    // warn-red: joueur à -500 récent (blinking)
+    if (p.blinking) totalEl.classList.add('warn-red');
+
     // Blink red flashy if at risk (2x streak)
-    if (p.zeroStreak === 2) totalEl.classList.add('blink-red');
+    if (p.zeroStreak === 2) {
+      totalEl.classList.add('blink-red');
+    } else {
+      totalEl.classList.remove('blink-red');
+    }
 
     // Malus lines: x streak / F remaining / O remaining
     const xLine = p.zeroStreak > 0 ? 'x'.repeat(p.zeroStreak) : '';
@@ -539,6 +721,8 @@ function applyEqualityPenalties() {
       if (i === mover) continue;
       if (players[i].total === players[mover].total && players[i].total !== 0) {
         applyMinus500(i);
+        // Le joueur qui a causé l'égalité reçoit +1 causedPenalties
+        players[mover].causedPenalties = (players[mover].causedPenalties || 0) + 1;
         showToast(`${players[i].name} : égalité ! -500 pts ⚡`);
         mover = i;
         changed = true;
@@ -607,6 +791,10 @@ function finDeTour() {
 // ═══════════════════════════════════════════
 function passerTour() {
   saveHistory();
+  // Marquer le tour courant comme SKIP pour ce joueur
+  if (turnScores[currentTurn]) {
+    turnScores[currentTurn][currentPlayer] = 'SKIP';
+  }
   const next = (currentPlayer + 1) % players.length;
   if (next === 0) {
     currentTurn++;
@@ -913,7 +1101,7 @@ function showWinner(idx, exact) {
       oTotal: orig.oCount || 0,
       xTotal: orig.xCount || 0,
       bestTurn: orig.bestTurn || 0,
-      poopGame: gamePoopCount,
+      poopGame: orig.minus500Count || 0,
       causedPenalties: orig.causedPenalties || 0,
     };
   });
@@ -960,7 +1148,7 @@ function recordGameStats(rankings) {
   rankings.forEach(r => {
     const key = normName(r.realName || r.name);
     if (!stats[key]) stats[key] = {
-      games: 0, wins: 0, totalRank: 0, bestScore: 0, totalScore: 0,
+      games: 0, wins: 0, totalRank: 0, bestScore: 0, worstScore: null, totalScore: 0,
       minus500: 0, fTotal: 0, oTotal: 0, xTotal: 0, perfectWins: 0,
       bestTurn: 0, poopLastGame: 0, poopTotal: 0, causedPenalties: 0,
       displayName: (r.realName || r.name)
@@ -971,6 +1159,7 @@ function recordGameStats(rankings) {
     if (r.perfect) s.perfectWins++;
     s.totalRank += r.rank;
     s.bestScore = Math.max(s.bestScore, r.total);
+    s.worstScore = (s.worstScore === null) ? r.total : Math.min(s.worstScore, r.total);
     s.totalScore += r.total;
     s.minus500 += r.minus500 || 0;
     s.fTotal += r.fTotal || 0;
@@ -994,104 +1183,122 @@ function recordGameStats(rankings) {
   saveStats(stats);
 }
 
+
+// Stats table columns
+// dir: 1 = plus haut est mieux (vert=max, rouge=min), -1 = plus bas est mieux (vert=min, rouge=max), 0 = pas de highlight
+const STATS_COLS = [
+  { key: 'displayName',     label: 'Joueur',         fmt: v => v || '-',                          cls: '',          w: '90px',  dir: 0  },
+  { key: 'wins',            label: '🏆 Victoires',   fmt: v => v || 0,                            cls: 'td-gold',   w: '80px',  dir: 1  },
+  { key: 'pct',             label: '% Victoires',    fmt: v => (v || 0) + '%',                    cls: 'td-gold',   w: '78px',  dir: 1  },
+  { key: 'games',           label: 'Parties',        fmt: v => v || 0,                            cls: '',          w: '60px',  dir: 0  },
+  { key: 'bestTurn',        label: 'Meilleur tour',  fmt: v => (v||0).toLocaleString('fr-FR'),    cls: 'td-gold',   w: '90px',  dir: 1  },
+  { key: 'worstScore',      label: 'Pire score',     fmt: v => (v===null||v===undefined) ? '-' : v.toLocaleString('fr-FR'), cls: 'td-red', w: '90px', dir: 1 },
+  { key: 'poopLastGame',    label: '💩 Partie',      fmt: v => v || 0,                            cls: 'td-orange', w: '68px',  dir: -1 },
+  { key: 'poopTotal',       label: '💩 Total',       fmt: v => v || 0,                            cls: 'td-orange', w: '64px',  dir: -1 },
+  { key: 'xLastGame',       label: 'x Partie',       fmt: v => v || 0,                            cls: '',          w: '60px',  dir: -1 },
+  { key: 'xTotal',          label: 'x Total',        fmt: v => v || 0,                            cls: '',          w: '56px',  dir: -1 },
+  { key: 'fLastGame',       label: 'F Partie',       fmt: v => v || 0,                            cls: 'td-purple', w: '60px',  dir: -1 },
+  { key: 'fTotal',          label: 'F Total',        fmt: v => v || 0,                            cls: 'td-purple', w: '56px',  dir: -1 },
+  { key: 'oLastGame',       label: 'O Partie',       fmt: v => v || 0,                            cls: 'td-orange', w: '60px',  dir: -1 },
+  { key: 'oTotal',          label: 'O Total',        fmt: v => v || 0,                            cls: 'td-orange', w: '56px',  dir: -1 },
+  { key: 'causedPenalties', label: '😈 -500 causés', fmt: v => v || 0,                            cls: 'td-red',    w: '100px', dir: -1 },
+  { key: 'perfectWins',     label: '⭐ 10k pile',    fmt: v => v || 0,                            cls: 'td-gold',   w: '74px',  dir: 1  },
+];
+
+let statsSortKey = 'pct';
+let statsSortDir = -1;
+
 function showStats() {
   document.getElementById('winner-overlay').style.display = 'none';
-  const stats = loadStats();
-  const body = document.getElementById('stats-body');
-  body.innerHTML = '';
+  renderStatsTable();
+  document.getElementById('stats-screen').style.display = 'flex';
+}
 
-  // keys are already normalized; display as-is (lowercase)
-  const names = Object.keys(stats);
-  if (names.length === 0) {
-    body.innerHTML = '<p style="color:#888;text-align:center;padding:20px">Pas encore de stats !</p>';
-    document.getElementById('stats-screen').style.display = 'flex';
+function renderStatsTable() {
+  const stats = loadStats();
+  const thead = document.getElementById('stats-thead');
+  const tbody = document.getElementById('stats-tbody');
+  if (!thead || !tbody) return;
+
+  const rows = Object.keys(stats).map(key => {
+    const s = stats[key];
+    const pct = s.games > 0 ? Math.round(s.wins / s.games * 100) : 0;
+    return { ...s, key, pct, displayName: s.displayName || key };
+  });
+
+  if (rows.length === 0) {
+    thead.innerHTML = '';
+    tbody.innerHTML = '<tr><td style="color:#888;text-align:center;padding:20px">Pas encore de stats !</td></tr>';
     return;
   }
 
-  // Sort by win percentage
-  names.sort((a, b) => {
-    const pctA = stats[a].games > 0 ? stats[a].wins / stats[a].games : 0;
-    const pctB = stats[b].games > 0 ? stats[b].wins / stats[b].games : 0;
-    return pctB - pctA;
+  // Sort
+  rows.sort((a, b) => {
+    const va = a[statsSortKey] ?? 0;
+    const vb = b[statsSortKey] ?? 0;
+    if (typeof va === 'string') return va.localeCompare(vb) * statsSortDir;
+    return (vb - va) * -statsSortDir;
   });
 
-  const rankEmoji = ['🥇','🥈','🥉'];
+  const ranked = [...rows].sort((a, b) => b.pct - a.pct);
 
-  names.forEach((name, idx) => {
-    const s = stats[name];
-    const pct = s.games > 0 ? Math.round(s.wins / s.games * 100) : 0;
-    const avgRank = s.games > 0 ? (s.totalRank / s.games).toFixed(1) : '-';
-
-    const card = document.createElement('div');
-    card.className = 'stats-player-card' + (idx < 3 ? ` rank-${idx+1}` : '');
-    card.innerHTML = `
-      <div class="stats-player-header">
-        <span class="stats-player-name">${s.displayName || name}</span>
-        <span class="stats-rank">${rankEmoji[idx] || '🎲'}</span>
-      </div>
-      <div class="stats-grid">
-        <div class="stats-cell">
-          <div class="stats-cell-label">🏆 Victoires</div>
-          <div class="stats-cell-value gold">${s.wins}</div>
-        </div>
-        <div class="stats-cell">
-          <div class="stats-cell-label">% Victoires</div>
-          <div class="stats-cell-value gold">${pct}%</div>
-        </div>
-        <div class="stats-cell">
-          <div class="stats-cell-label">Parties</div>
-          <div class="stats-cell-value">${s.games}</div>
-        </div>
-        <div class="stats-cell">
-          <div class="stats-cell-label">Meilleur tour</div>
-          <div class="stats-cell-value gold">${(s.bestTurn||0).toLocaleString('fr-FR')}</div>
-        </div>
-        <div class="stats-cell">
-          <div class="stats-cell-label">💩 dern. partie</div>
-          <div class="stats-cell-value orange">${s.poopLastGame || 0}</div>
-        </div>
-        <div class="stats-cell">
-          <div class="stats-cell-label">💩 total</div>
-          <div class="stats-cell-value orange">${s.poopTotal || 0}</div>
-        </div>
-        <div class="stats-cell">
-          <div class="stats-cell-label">x partie</div>
-          <div class="stats-cell-value">${s.xLastGame || 0}</div>
-        </div>
-        <div class="stats-cell">
-          <div class="stats-cell-label">x cumulés</div>
-          <div class="stats-cell-value">${s.xTotal || 0}</div>
-        </div>
-        <div class="stats-cell">
-          <div class="stats-cell-label">F partie</div>
-          <div class="stats-cell-value purple">${s.fLastGame || 0}</div>
-        </div>
-        <div class="stats-cell">
-          <div class="stats-cell-label">F cumulés</div>
-          <div class="stats-cell-value purple">${s.fTotal || 0}</div>
-        </div>
-        <div class="stats-cell">
-          <div class="stats-cell-label">O partie</div>
-          <div class="stats-cell-value" style="color:#ffd93d">${s.oLastGame || 0}</div>
-        </div>
-        <div class="stats-cell">
-          <div class="stats-cell-label">O cumulés</div>
-          <div class="stats-cell-value" style="color:#ffd93d">${s.oTotal || 0}</div>
-        </div>
-        <div class="stats-cell">
-          <div class="stats-cell-label">😈 -500 causés</div>
-          <div class="stats-cell-value" style="color:#ff6060">${s.causedPenalties || 0}</div>
-        </div>
-        <div class="stats-cell">
-          <div class="stats-cell-label">⭐ Victoires 10k</div>
-          <div class="stats-cell-value gold">${s.perfectWins || 0}</div>
-        </div>
-      </div>
-    `;
-    body.appendChild(card);
+  // Header
+  thead.innerHTML = '';
+  const trh = document.createElement('tr');
+  STATS_COLS.forEach(col => {
+    const th = document.createElement('th');
+    th.textContent = col.label;
+    th.style.minWidth = col.w;
+    th.style.width = col.w;
+    if (col.key === statsSortKey) th.className = statsSortDir === -1 ? 'sort-desc' : 'sort-asc';
+    th.onclick = () => {
+      if (statsSortKey === col.key) statsSortDir *= -1;
+      else { statsSortKey = col.key; statsSortDir = -1; }
+      renderStatsTable();
+    };
+    trh.appendChild(th);
   });
+  thead.appendChild(trh);
 
-  document.getElementById('stats-screen').style.display = 'flex';
+  // Précalculer best/worst par colonne (seulement si dir !== 0 et plus d'un joueur)
+  const colStats = {};
+  if (rows.length > 1) {
+    STATS_COLS.forEach(col => {
+      if (col.dir === 0) return;
+      const vals = rows.map(r => Number(r[col.key]) || 0);
+      const max = Math.max(...vals);
+      const min = Math.min(...vals);
+      // Pas de highlight si tout le monde a la même valeur
+      colStats[col.key] = (max === min) ? null : { max, min };
+    });
+  }
+
+  // Body
+  tbody.innerHTML = '';
+  rows.forEach(row => {
+    const rank = ranked.findIndex(r => r.key === row.key) + 1;
+    const tr = document.createElement('tr');
+    if (rank <= 3) tr.className = 'rank-' + rank;
+    STATS_COLS.forEach(col => {
+      const td = document.createElement('td');
+      td.textContent = col.fmt(row[col.key]);
+      td.style.minWidth = col.w;
+      if (col.cls) td.className = col.cls;
+
+      // Highlight best (vert) / worst (rouge)
+      if (col.dir !== 0 && colStats[col.key]) {
+        const val = Number(row[col.key]) || 0;
+        const { max, min } = colStats[col.key];
+        const isBest  = col.dir === 1 ? val === max : val === min;
+        const isWorst = col.dir === 1 ? val === min : val === max;
+        if (isBest)  { td.style.background = '#0d2e1a'; td.style.color = '#4dff91'; td.style.fontWeight = 'bold'; }
+        if (isWorst) { td.style.background = '#2e0d0d'; td.style.color = '#ff5555'; td.style.fontWeight = 'bold'; }
+      }
+
+      tr.appendChild(td);
+    });
+    tbody.appendChild(tr);
+  });
 }
 
 function closeStats() {
@@ -1106,18 +1313,20 @@ function closeStats() {
 function clearAllStats() {
   const body = document.getElementById('stats-body');
   // Show inline confirmation instead of confirm()
-  body.innerHTML = '<div style="text-align:center;padding:20px">' +
-    '<p style="color:#ff5555;font-size:15px;margin-bottom:16px">Effacer TOUTES les stats ?<br>Action irréversible !</p>' +
-    '<button onclick="doDeleteStats()" style="background:#e94560;color:#fff;border:none;border-radius:8px;padding:12px 24px;font-size:15px;font-weight:bold;cursor:pointer;margin-right:10px">OUI, tout effacer</button>' +
-    '<button onclick="showStats()" style="background:#0f3460;color:#ccc;border:1px solid #555;border-radius:8px;padding:12px 16px;font-size:14px;cursor:pointer">Annuler</button>' +
-    '</div>';
+  const tbody = document.getElementById('stats-tbody');
+  const thead = document.getElementById('stats-thead');
+  thead.innerHTML = '';
+  tbody.innerHTML = '<tr><td colspan="15" style="text-align:center;padding:20px">' +
+    '<p style="color:#ff5555;font-size:14px;margin-bottom:14px">Effacer TOUTES les stats ?</p>' +
+    '<button onclick="doDeleteStats()" style="background:#e94560;color:#fff;border:none;border-radius:8px;padding:10px 20px;font-size:14px;font-weight:bold;cursor:pointer;margin-right:8px">OUI</button>' +
+    '<button onclick="renderStatsTable()" style="background:#0f3460;color:#ccc;border:1px solid #555;border-radius:8px;padding:10px 14px;font-size:13px;cursor:pointer">Annuler</button>' +
+    '</td></tr>';
 }
 
 function doDeleteStats() {
   localStorage.removeItem('jeu10000_stats');
   sessionData = {};
-  const body = document.getElementById('stats-body');
-  body.innerHTML = '<p style="color:#888;text-align:center;padding:30px;font-size:14px">Aucune stat enregistrée.</p>';
+  renderStatsTable();
   showToast('Tout effacé !');
 }
 
