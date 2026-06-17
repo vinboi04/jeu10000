@@ -493,14 +493,17 @@ function closeAllDropdowns(except) {
   });
 }
 
-function toggleDropdown(btn) {
+async function toggleDropdown(btn) {
   const row = btn.closest('.player-row');
   const dd = row.querySelector('.player-dropdown');
   const isOpen = dd.classList.contains('open');
   closeAllDropdowns(null);
   if (isOpen) return;
 
-  // Construire la liste depuis localStorage
+  dd.innerHTML = '<div class="player-dropdown-empty">Chargement…</div>';
+  dd.classList.add('open');
+
+  await fetchStatsFromServer();
   const stats = loadStats();
   const known = Object.values(stats)
     .filter(s => s.displayName)
@@ -519,7 +522,6 @@ function toggleDropdown(btn) {
       dd.appendChild(item);
     });
   }
-  dd.classList.add('open');
 }
 
 function pickPlayer(row, name) {
@@ -1080,7 +1082,7 @@ function undo() {
 // ═══════════════════════════════════════════
 // WINNER
 // ═══════════════════════════════════════════
-function showWinner(idx, exact) {
+async function showWinner(idx, exact) {
   const p = players[idx];
   heartRain();
 
@@ -1105,7 +1107,7 @@ function showWinner(idx, exact) {
       causedPenalties: orig.causedPenalties || 0,
     };
   });
-  recordGameStats(rankings);
+  await recordGameStats(rankings);
 
   document.getElementById('winner-text').textContent = `🏆 ${p.name} GAGNE !`;
   document.getElementById('winner-sub').textContent = exact
@@ -1128,22 +1130,42 @@ function newGame() {
 
 
 // ═══════════════════════════════════════════
-// STATS (localStorage)
+// STATS (serveur partagé via API + cache mémoire)
 // ═══════════════════════════════════════════
+let statsCache = {};
+let statsCacheLoaded = false;
+
+async function fetchStatsFromServer() {
+  try {
+    const res = await fetch('/api/stats');
+    if (!res.ok) throw new Error('fetch failed');
+    statsCache = await res.json();
+    statsCacheLoaded = true;
+  } catch (e) {
+    console.error('Erreur chargement stats serveur:', e);
+  }
+  return statsCache;
+}
+
 function loadStats() {
-  try { return JSON.parse(localStorage.getItem('jeu10000_stats') || '{}'); }
-  catch(e) { return {}; }
+  return statsCache;
 }
 
 function saveStats(stats) {
-  localStorage.setItem('jeu10000_stats', JSON.stringify(stats));
+  statsCache = stats;
+  fetch('/api/stats', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(stats)
+  }).catch(e => console.error('Erreur sauvegarde stats serveur:', e));
 }
 
 function normName(name) {
   return name.trim().toLowerCase();
 }
 
-function recordGameStats(rankings) {
+async function recordGameStats(rankings) {
+  await fetchStatsFromServer(); // récupère les stats les plus fraîches avant de merger
   const stats = loadStats();
   rankings.forEach(r => {
     const key = normName(r.realName || r.name);
@@ -1208,10 +1230,13 @@ const STATS_COLS = [
 let statsSortKey = 'pct';
 let statsSortDir = -1;
 
-function showStats() {
+async function showStats() {
   document.getElementById('winner-overlay').style.display = 'none';
-  renderStatsTable();
   document.getElementById('stats-screen').style.display = 'flex';
+  const tbody = document.getElementById('stats-tbody');
+  if (tbody) tbody.innerHTML = '<tr><td style="text-align:center;padding:20px;color:#888">Chargement…</td></tr>';
+  await fetchStatsFromServer();
+  renderStatsTable();
 }
 
 function renderStatsTable() {
@@ -1324,10 +1349,17 @@ function clearAllStats() {
 }
 
 function doDeleteStats() {
-  localStorage.removeItem('jeu10000_stats');
-  sessionData = {};
-  renderStatsTable();
-  showToast('Tout effacé !');
+  fetch('/api/stats', { method: 'DELETE' })
+    .then(() => {
+      statsCache = {};
+      sessionData = {};
+      renderStatsTable();
+      showToast('Tout effacé !');
+    })
+    .catch(e => {
+      console.error(e);
+      showToast('Erreur lors de la suppression');
+    });
 }
 
 
@@ -1374,6 +1406,10 @@ function showToast(msg) {
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => { t.style.opacity = '0'; }, 3500);
 }
+
+// Chargement initial des stats partagées depuis le serveur
+fetchStatsFromServer();
+
 </script>
 </body>
 </html>
