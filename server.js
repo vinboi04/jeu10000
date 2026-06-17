@@ -1,14 +1,13 @@
-const express = require('express');
-const path = require('path');
-const app = express();
-const PORT = process.env.PORT || 3000;
-
-app.use(express.static(path.join(__dirname, '.')));
-
-app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'index.html'));
-});
-
-app.listen(PORT, () => {
-  console.log(`Jeu 10000 tourne sur le port ${PORT}`);
-});
+{
+  "name": "jeu10000",
+  "version": "1.0.0",
+  "description": "Jeu de dés 10 000",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "pg": "^8.11.3"
+  }
+}
