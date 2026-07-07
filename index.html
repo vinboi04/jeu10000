@@ -581,12 +581,15 @@ function startGame() {
   players = names.map((name, i) => ({
     name: aliases[i] || name,  // display alias in game
     realName: name,            // used for stats
-    total: 0, zeroStreak: 0, blinking: false, blinkUntilTurn: -1, skipNextTurn: false, minus500Count: 0,
+    total: 0, zeroStreak: 0, blinking: false, blinkUntilTurn: -1, skipNextTurn: false, minus500Count: 0, xCount: 0, fCount: 0, oCount: 0, causedPenalties: 0,
   }));
 
   players.forEach(p => {
     const key = normName(p.realName);
     if (!sessionData[key]) sessionData[key] = { fCount: 0, oCount: 0 };
+    // Sauvegarder les compteurs au début de la partie pour calculer le delta
+    sessionData[key].fCountAtStart = sessionData[key].fCount;
+    sessionData[key].oCountAtStart = sessionData[key].oCount;
     // If alias differs from realName, remove any alias entry from stats
     if (p.name !== p.realName) {
       const stats = loadStats();
@@ -1182,8 +1185,8 @@ async function showWinner(idx, exact) {
       rank: rank + 1,
       perfect: exact && pl.origIdx === idx,
       minus500: orig.minus500Count || 0,
-      fTotal: orig.fCount || 0,
-      oTotal: orig.oCount || 0,
+      fTotal: Math.max(0, (orig.fCount || 0) - (sessionData[normName(pl.realName || pl.name)]?.fCountAtStart || 0)),
+      oTotal: Math.max(0, (orig.oCount || 0) - (sessionData[normName(pl.realName || pl.name)]?.oCountAtStart || 0)),
       xTotal: orig.xCount || 0,
       bestTurn: orig.bestTurn || 0,
       poopGame: orig.minus500Count || 0,
