@@ -1,16 +1,13 @@
 const express = require('express');
 const path = require('path');
 const { Pool } = require('pg');
-
 const app = express();
 const PORT = process.env.PORT || 3000;
-
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false }
 });
 
-// Create the stats table if it doesn't exist
 async function initDb() {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS player_stats (
@@ -41,7 +38,7 @@ app.get('/api/stats', async (req, res) => {
   }
 });
 
-// POST update stats (merge/replace full stats object)
+// POST update stats (merge intelligent)
 app.post('/api/stats', async (req, res) => {
   try {
     const stats = req.body;
@@ -51,19 +48,14 @@ app.post('/api/stats', async (req, res) => {
       for (const key of Object.keys(stats)) {
         const s = stats[key];
         const { displayName, ...incoming } = s;
-
-        // Lire ce qui existe déjà
         const existing = await client.query(
           'SELECT data FROM player_stats WHERE player_key = $1',
           [key]
         );
-
         let merged;
         if (existing.rows.length === 0) {
-          // Nouveau joueur — on prend tout tel quel
           merged = incoming;
         } else {
-          // Joueur existant — on additionne
           const old = existing.rows[0].data;
           merged = {
             wins:            (old.wins            || 0) + (incoming.wins            || 0),
@@ -78,11 +70,9 @@ app.post('/api/stats', async (req, res) => {
             oLastGame:       incoming.oLastGame     || 0,
             causedPenalties: (old.causedPenalties  || 0) + (incoming.causedPenalties || 0),
             perfectWins:     (old.perfectWins      || 0) + (incoming.perfectWins     || 0),
-            // Garder le meilleur tour entre les deux
             bestTurn:        Math.max(old.bestTurn || 0, incoming.bestTurn || 0),
           };
         }
-
         await client.query(
           `INSERT INTO player_stats (player_key, display_name, data)
            VALUES ($1, $2, $3)
@@ -97,6 +87,17 @@ app.post('/api/stats', async (req, res) => {
     } finally {
       client.release();
     }
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+// DELETE all stats
+app.delete('/api/stats', async (req, res) => {
+  try {
+    await pool.query('DELETE FROM player_stats');
     res.json({ ok: true });
   } catch (err) {
     console.error(err);
