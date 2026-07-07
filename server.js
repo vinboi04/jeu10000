@@ -38,7 +38,7 @@ app.get('/api/stats', async (req, res) => {
   }
 });
 
-// POST update stats (merge intelligent)
+// POST — le client envoie les totaux corrects, le serveur remplace simplement
 app.post('/api/stats', async (req, res) => {
   try {
     const stats = req.body;
@@ -47,37 +47,12 @@ app.post('/api/stats', async (req, res) => {
       await client.query('BEGIN');
       for (const key of Object.keys(stats)) {
         const s = stats[key];
-        const { displayName, ...incoming } = s;
-        const existing = await client.query(
-          'SELECT data FROM player_stats WHERE player_key = $1',
-          [key]
-        );
-        let merged;
-        if (existing.rows.length === 0) {
-          merged = incoming;
-        } else {
-          const old = existing.rows[0].data;
-          merged = {
-            wins:            (old.wins            || 0) + (incoming.wins            || 0),
-            games:           (old.games           || 0) + (incoming.games           || 0),
-            poopTotal:       (old.poopTotal        || 0) + (incoming.poopTotal       || 0),
-            poopLastGame:    incoming.poopLastGame  || 0,
-            xTotal:          (old.xTotal           || 0) + (incoming.xTotal          || 0),
-            xLastGame:       incoming.xLastGame     || 0,
-            fTotal:          (old.fTotal           || 0) + (incoming.fTotal          || 0),
-            fLastGame:       incoming.fLastGame     || 0,
-            oTotal:          (old.oTotal           || 0) + (incoming.oTotal          || 0),
-            oLastGame:       incoming.oLastGame     || 0,
-            causedPenalties: (old.causedPenalties  || 0) + (incoming.causedPenalties || 0),
-            perfectWins:     (old.perfectWins      || 0) + (incoming.perfectWins     || 0),
-            bestTurn:        Math.max(old.bestTurn || 0, incoming.bestTurn || 0),
-          };
-        }
+        const { displayName, ...data } = s;
         await client.query(
           `INSERT INTO player_stats (player_key, display_name, data)
            VALUES ($1, $2, $3)
            ON CONFLICT (player_key) DO UPDATE SET display_name = $2, data = $3`,
-          [key, displayName || key, JSON.stringify(merged)]
+          [key, displayName || key, JSON.stringify(data)]
         );
       }
       await client.query('COMMIT');
