@@ -34,6 +34,13 @@ async function initDb() {
       updated_at TIMESTAMPTZ DEFAULT NOW()
     );
   `);
+  // Table pour tracker le timestamp de la dernière activité de session
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS session_activity (
+      id INTEGER PRIMARY KEY DEFAULT 1,
+      last_activity TIMESTAMPTZ DEFAULT NOW()
+    );
+  `);
   console.log('DB ready');
 }
 initDb().catch(err => console.error('DB init error:', err));
@@ -146,6 +153,11 @@ app.post('/api/session', async (req, res) => {
           [key, fCount || 0, oCount || 0]
         );
       }
+      // Mettre à jour l'activité de session
+      await client.query(`
+        INSERT INTO session_activity (id, last_activity) VALUES (1, NOW())
+        ON CONFLICT (id) DO UPDATE SET last_activity = NOW()
+      `);
       await client.query('COMMIT');
     } catch (e) {
       await client.query('ROLLBACK');
@@ -164,6 +176,7 @@ app.post('/api/session', async (req, res) => {
 app.delete('/api/session', async (req, res) => {
   try {
     await pool.query('DELETE FROM session_data');
+    await pool.query('DELETE FROM session_activity');
     res.json({ ok: true });
   } catch (err) {
     console.error(err);
@@ -171,14 +184,20 @@ app.delete('/api/session', async (req, res) => {
   }
 });
 
-// GET session stats
+// GET session stats — avec auto-reset fiable basé sur session_activity
 app.get('/api/session_stats', async (req, res) => {
   try {
-    // Auto-reset si plus de 4h sans activité
-    const lastActivity = await pool.query('SELECT MAX(last_game) as last FROM session_data');
-    const last = lastActivity.rows[0].last;
-    if (!last || Date.now() - new Date(last).getTime() > SESSION_TIMEOUT_MS) {
+    const activityResult = await pool.query('SELECT last_activity FROM session_activity WHERE id = 1');
+    if (activityResult.rows.length === 0) {
+      // Aucune activité enregistrée — session vide
       await pool.query('DELETE FROM session_stats');
+      return res.json({});
+    }
+    const lastActivity = new Date(activityResult.rows[0].last_activity).getTime();
+    if (Date.now() - lastActivity > SESSION_TIMEOUT_MS) {
+      // Plus de 4h — reset automatique
+      await pool.query('DELETE FROM session_stats');
+      await pool.query('DELETE FROM session_activity');
       return res.json({});
     }
     const result = await pool.query('SELECT player_key, display_name, data FROM session_stats');
@@ -193,7 +212,7 @@ app.get('/api/session_stats', async (req, res) => {
   }
 });
 
-// POST session stats
+// POST session stats — met aussi à jour l'activité
 app.post('/api/session_stats', async (req, res) => {
   try {
     const stats = req.body;
@@ -210,6 +229,11 @@ app.post('/api/session_stats', async (req, res) => {
           [key, displayName || key, JSON.stringify(data)]
         );
       }
+      // Mettre à jour l'activité
+      await client.query(`
+        INSERT INTO session_activity (id, last_activity) VALUES (1, NOW())
+        ON CONFLICT (id) DO UPDATE SET last_activity = NOW()
+      `);
       await client.query('COMMIT');
     } catch (e) {
       await client.query('ROLLBACK');
@@ -228,6 +252,7 @@ app.post('/api/session_stats', async (req, res) => {
 app.delete('/api/session_stats', async (req, res) => {
   try {
     await pool.query('DELETE FROM session_stats');
+    await pool.query('DELETE FROM session_activity');
     res.json({ ok: true });
   } catch (err) {
     console.error(err);
