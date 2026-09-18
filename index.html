@@ -2418,4 +2418,55 @@ async function pollSpectator(key) {
     buildTable();
     renderTable();
 
-    // Rejoue le po
+    // Rejoue le popup rose (F/O, échange, passage de tour…) apparu depuis le dernier rafraîchissement
+    if (data.lastEvent && data.lastEvent.id) {
+      if (spectatorLastEventId === -1) {
+        spectatorLastEventId = data.lastEvent.id; // pas d'affichage au 1er chargement (pas d'historique à rejouer)
+      } else if (data.lastEvent.id > spectatorLastEventId) {
+        spectatorLastEventId = data.lastEvent.id;
+        showToast(data.lastEvent.msg);
+      }
+    }
+
+    // Annonce du gagnant + pluie de cœurs, une seule fois
+    if (gameOver && data.winner && !spectatorWinnerShown) {
+      spectatorWinnerShown = true;
+      heartRain();
+      document.getElementById('winner-text').textContent = `🏆 ${data.winner.name} GAGNE !`;
+      document.getElementById('winner-sub').textContent = data.winner.exact
+        ? `Score exact de 10 000 — Victoire parfaite !`
+        : `Meilleur score : ${data.winner.total.toLocaleString('fr-FR')} pts`;
+      document.getElementById('winner-overlay').style.display = 'flex';
+    }
+  } catch(e) {
+    // erreur réseau ponctuelle : on retente au prochain tick, pas de message intrusif
+  }
+}
+
+// Appelée dès que la partie n'est plus suivable (introuvable, expirée, ou le maître est passé à autre chose) —
+// le dernier tableau connu (et l'écran gagnant, le cas échéant) reste affiché, pas de redirection brutale.
+function spectatorGameEnded() {
+  if (spectatorEnded) return;
+  spectatorEnded = true;
+  if (spectatorPollTimer) clearInterval(spectatorPollTimer);
+  const banner = document.getElementById('spectator-banner');
+  banner.style.background = '#2a0a0a';
+  banner.style.borderColor = '#ff5555';
+  banner.innerHTML = `<span style="color:#ff8080">🏁 Partie terminée (ou introuvable)</span> — <button onclick="quitSpectator()" style="background:none;border:1px solid #ff5555;color:#ff8080;border-radius:6px;padding:2px 8px;font-size:11px;cursor:pointer">Fermer</button>`;
+}
+
+// Chargement initial
+fetchStatsFromServer();
+const __spectateKey = new URLSearchParams(location.search).get('spectate');
+if (__spectateKey) {
+  initSpectatorMode(__spectateKey);
+} else {
+  fetchSessionFromServer().then(() => { tryRestoreGameState(); });
+}
+if (typeof fetchSessionStatsFromServer === "function") fetchSessionStatsFromServer();
+
+</script>
+<div id="sc-total-bubble"></div>
+</body>
+</html>
+ 
