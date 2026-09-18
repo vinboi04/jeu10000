@@ -517,7 +517,7 @@ thead { position: sticky; top: 0; z-index: 10; }
     <button onclick="deletePlayerPrompt()" style="background:#1a0a2e;color:#c060ff;border:1px solid #c060ff;border-radius:8px;padding:8px 16px;font-size:12px;cursor:pointer;margin-top:6px;margin-bottom:6px">👤 Supprimer un joueur</button><br>
     <button onclick="mergePlayerPrompt()" style="background:#1a0a2e;color:#c060ff;border:1px solid #c060ff;border-radius:8px;padding:8px 16px;font-size:12px;cursor:pointer;margin-top:6px;margin-bottom:6px">🔀 Fusionner deux joueurs</button><br>
     <span style="font-size:10px;color:#444">Stats partagées entre tous les appareils</span><br>
-    <span style="font-size:9px;color:#333">Build v2026-09-19-26</span>
+    <span style="font-size:9px;color:#333">Build v2026-09-19-27</span>
   </div>
 </div>
 
@@ -1577,7 +1577,9 @@ function continueGame() { document.getElementById('winner-overlay').style.displa
 
 function newGame() {
   clearGameState();
-  stopLiveGame();
+  // Pas de stopLiveGame() ici : la nouvelle partie écrasera naturellement l'ancienne
+  // sous la même clé (même 1er joueur) dès son premier coup — plus sûr qu'un delete
+  // qui pourrait, en cas de délai réseau, supprimer la nouvelle partie par erreur.
   document.getElementById('winner-overlay').style.display = 'none';
   document.getElementById('game-screen').style.display = 'none';
   document.getElementById('score-input').value = '';
