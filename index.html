@@ -517,7 +517,7 @@ thead { position: sticky; top: 0; z-index: 10; }
     <button onclick="deletePlayerPrompt()" style="background:#1a0a2e;color:#c060ff;border:1px solid #c060ff;border-radius:8px;padding:8px 16px;font-size:12px;cursor:pointer;margin-top:6px;margin-bottom:6px">👤 Supprimer un joueur</button><br>
     <button onclick="mergePlayerPrompt()" style="background:#1a0a2e;color:#c060ff;border:1px solid #c060ff;border-radius:8px;padding:8px 16px;font-size:12px;cursor:pointer;margin-top:6px;margin-bottom:6px">🔀 Fusionner deux joueurs</button><br>
     <span style="font-size:10px;color:#444">Stats partagées entre tous les appareils</span><br>
-    <span style="font-size:9px;color:#333">Build v2026-09-19-25</span>
+    <span style="font-size:9px;color:#333">Build v2026-09-19-26</span>
   </div>
 </div>
 
@@ -2349,6 +2349,7 @@ let spectatorEnded = false;
 let spectatorWinnerShown = false;
 let spectatorLastPoopCount = -1; // -1 = pas encore initialisé, évite une pluie de 💩 parasite au 1er chargement
 let spectatorLastEventId = -1;   // -1 = pas encore initialisé, évite de rejouer tout l'historique au 1er chargement
+let spectatorPrevGameOver = false; // dernier état connu — sert à détecter la transition "terminée → nouvelle partie"
 
 // Ferme l'onglet spectateur directement, plutôt que de recharger la page (qui pouvait
 // restaurer par erreur une ancienne partie locale sauvegardée sur cet appareil).
@@ -2396,9 +2397,10 @@ async function pollSpectator(key) {
     const { masterName, data } = await res.json();
     document.getElementById('spectator-master-name').textContent = masterName || key;
 
-    // Si on était sur l'écran "partie terminée" et qu'une NOUVELLE partie démarre
-    // sous le même maître, on rebascule automatiquement dessus.
-    if (spectatorEnded && !data.gameOver) {
+    // Si la partie qu'on suivait était terminée et qu'elle ne l'est plus (nouvelle partie
+    // démarrée sous le même maître), on rebascule automatiquement dessus — que le spectateur
+    // ait vu ou non un état "introuvable" entre les deux (le maître peut enchaîner très vite).
+    if (spectatorPrevGameOver && !data.gameOver) {
       spectatorEnded = false;
       spectatorWinnerShown = false;
       spectatorLastPoopCount = -1;
@@ -2411,6 +2413,7 @@ async function pollSpectator(key) {
         <button onclick="quitSpectator()" style="margin-left:10px;background:none;border:1px solid #c060ff;color:#c060ff;border-radius:6px;padding:2px 8px;font-size:11px;cursor:pointer">Quitter</button>`;
       showToast('Nouvelle partie détectée — suivi repris ▶');
     }
+    spectatorPrevGameOver = !!data.gameOver;
 
     await fetchSessionFromServer(); // pour afficher les lignes F/O comme chez le maître
 
