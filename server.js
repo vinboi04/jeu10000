@@ -10,6 +10,7 @@ const pool = new Pool({
 
 const SESSION_TIMEOUT_MS = 4 * 60 * 60 * 1000; // 4 heures
 const LIVE_GAME_TIMEOUT_MS = 60 * 60 * 1000; // 1 heure — une partie en direct sans mise à jour disparaît
+const VIEWER_ACTIVE_WINDOW_MS = 5000; // un spectateur est compté "actif" s'il a rafraîchi dans les 5 dernières secondes
 
 async function initDb() {
   await pool.query(`
@@ -49,6 +50,15 @@ async function initDb() {
       master_name TEXT,
       data JSONB,
       updated_at TIMESTAMPTZ DEFAULT NOW()
+    );
+  `);
+  // Table des spectateurs actifs (présence en temps quasi-réel)
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS live_game_viewers (
+      master_key TEXT NOT NULL,
+      viewer_id TEXT NOT NULL,
+      last_seen TIMESTAMPTZ DEFAULT NOW(),
+      PRIMARY KEY (master_key, viewer_id)
     );
   `);
   console.log('DB ready');
@@ -275,6 +285,7 @@ app.delete('/api/session_stats', async (req, res) => {
 // ═══════════════════════════════════════════
 
 // GET l'état d'une partie en direct précise (pour un spectateur qui suit)
+// ?viewer=<id> optionnel : enregistre la présence de ce spectateur (battement de cœur)
 app.get('/api/live-game/:key', async (req, res) => {
   try {
     const result = await pool.query(
@@ -290,12 +301,45 @@ app.get('/api/live-game/:key', async (req, res) => {
       await pool.query('DELETE FROM live_games WHERE master_key = $1', [req.params.key]);
       return res.status(404).json({ error: 'Partie expirée' });
     }
-    res.json({ masterName: row.master_name, data: row.data, updatedAt: row.updated_at });
+    const viewerId = req.query.viewer;
+    if (viewerId) {
+      await pool.query(
+        `INSERT INTO live_game_viewers (master_key, viewer_id, last_seen)
+         VALUES ($1, $2, NOW())
+         ON CONFLICT (master_key, viewer_id) DO UPDATE SET last_seen = NOW()`,
+        [req.params.key, String(viewerId)]
+      );
+    }
+    const viewerCount = await getActiveViewerCount(req.params.key);
+    res.json({ masterName: row.master_name, data: row.data, updatedAt: row.updated_at, viewerCount });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Erreur serveur' });
   }
 });
+
+// GET le nombre de spectateurs actifs (pour le maître, sans s'enregistrer lui-même comme spectateur)
+app.get('/api/live-game/:key/viewers', async (req, res) => {
+  try {
+    const viewerCount = await getActiveViewerCount(req.params.key);
+    res.json({ viewerCount });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+async function getActiveViewerCount(masterKey) {
+  await pool.query(
+    'DELETE FROM live_game_viewers WHERE master_key = $1 AND last_seen < NOW() - INTERVAL \'10 seconds\'',
+    [masterKey]
+  );
+  const result = await pool.query(
+    'SELECT COUNT(*)::int AS count FROM live_game_viewers WHERE master_key = $1 AND last_seen > NOW() - INTERVAL \'5 seconds\'',
+    [masterKey]
+  );
+  return result.rows[0].count;
+}
 
 // POST — le maître pousse l'état de sa partie
 app.post('/api/live-game/:key', async (req, res) => {
@@ -318,6 +362,7 @@ app.post('/api/live-game/:key', async (req, res) => {
 app.delete('/api/live-game/:key', async (req, res) => {
   try {
     await pool.query('DELETE FROM live_games WHERE master_key = $1', [req.params.key]);
+    await pool.query('DELETE FROM live_game_viewers WHERE master_key = $1', [req.params.key]);
     res.json({ ok: true });
   } catch (err) {
     console.error(err);
