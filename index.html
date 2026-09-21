@@ -514,12 +514,14 @@ thead { position: sticky; top: 0; z-index: 10; }
   </div>
   <div class="stats-body"><table class="stats-table" id="stats-table"><thead id="stats-thead"></thead><tbody id="stats-tbody"></tbody></table></div>
   <div class="stats-footer">
-    <button onclick="exportStatsBackup()" style="background:#0a1a2a;color:#5aa8ff;border:1px solid #5aa8ff;border-radius:8px;padding:8px 16px;font-size:12px;cursor:pointer;margin-bottom:6px">💾 Exporter les stats (sauvegarde)</button><br>
-    <button onclick="clearAllStats()" style="background:#3a0808;color:#ff5555;border:1px solid #ff5555;border-radius:8px;padding:8px 16px;font-size:12px;cursor:pointer;margin-bottom:6px">🗑 Effacer toutes les stats et joueurs</button><br>
-    <button onclick="deletePlayerPrompt()" style="background:#1a0a2e;color:#c060ff;border:1px solid #c060ff;border-radius:8px;padding:8px 16px;font-size:12px;cursor:pointer;margin-top:6px;margin-bottom:6px">👤 Supprimer un joueur</button><br>
-    <button onclick="mergePlayerPrompt()" style="background:#1a0a2e;color:#c060ff;border:1px solid #c060ff;border-radius:8px;padding:8px 16px;font-size:12px;cursor:pointer;margin-top:6px;margin-bottom:6px">🔀 Fusionner deux joueurs</button><br>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px">
+      <button onclick="exportStatsBackup()" style="background:#0a1a2a;color:#5aa8ff;border:1px solid #5aa8ff;border-radius:8px;padding:8px 6px;font-size:11px;cursor:pointer">💾 Exporter</button>
+      <button onclick="clearAllStats()" style="background:#3a0808;color:#ff5555;border:1px solid #ff5555;border-radius:8px;padding:8px 6px;font-size:11px;cursor:pointer">🗑 Effacer tout</button>
+      <button onclick="deletePlayerPrompt()" style="background:#1a0a2e;color:#c060ff;border:1px solid #c060ff;border-radius:8px;padding:8px 6px;font-size:11px;cursor:pointer">👤 Supprimer</button>
+      <button onclick="mergePlayerPrompt()" style="background:#1a0a2e;color:#c060ff;border:1px solid #c060ff;border-radius:8px;padding:8px 6px;font-size:11px;cursor:pointer">🔀 Fusionner</button>
+    </div>
     <span style="font-size:10px;color:#444">Stats partagées entre tous les appareils</span><br>
-    <span style="font-size:9px;color:#333">Build v2026-09-19-30</span>
+    <span style="font-size:9px;color:#333">Build v2026-09-19-31</span>
   </div>
 </div>
 
@@ -1008,7 +1010,8 @@ function updateTurnIndicator() {
   if (myRank === 0) {
     const badge = document.createElement('span');
     badge.className = 'gap-leader';
-    badge.textContent = '🏆 Leader !';
+    const remaining = Math.max(0, 10000 - p.total);
+    badge.textContent = `🏆 Leader ! (${remaining} pts de 10 000)`;
     gapZone.appendChild(badge);
   } else {
     if (myRank > 0) {
@@ -2485,6 +2488,7 @@ async function pollSpectator(key) {
 
     buildTable();
     renderTable();
+    updateTurnIndicator();
 
     // Rejoue le popup rose (F/O, échange, passage de tour…) apparu depuis le dernier rafraîchissement
     if (data.lastEvent && data.lastEvent.id) {
