@@ -521,7 +521,7 @@ thead { position: sticky; top: 0; z-index: 10; }
       <button onclick="mergePlayerPrompt()" style="background:#1a0a2e;color:#c060ff;border:1px solid #c060ff;border-radius:8px;padding:8px 6px;font-size:11px;cursor:pointer">🔀 Fusionner</button>
     </div>
     <span style="font-size:10px;color:#444">Stats partagées entre tous les appareils</span><br>
-    <span style="font-size:9px;color:#333">Build v2026-09-19-32</span>
+    <span style="font-size:9px;color:#333">Build v2026-09-19-33</span>
   </div>
 </div>
 
@@ -2251,18 +2251,36 @@ async function doMergePlayers() {
   keep.yamTotal = (keep.yamTotal || 0) + (merge.yamTotal || 0);
   delete stats[intoKey];
 
+  // Toujours ranger le résultat sous la clé que les FUTURES parties utiliseront
+  // (normName actuel du nom affiché) — sinon une nouvelle entrée se recrée à chaque partie.
+  const canonicalKey = normName(keep.displayName || keepKey);
+  if (canonicalKey !== keepKey) {
+    delete stats[keepKey];
+    stats[canonicalKey] = keep;
+  }
+
   // Fusionner aussi F/O de session en cours si présents
   if (sessionData[intoKey]) {
-    if (!sessionData[keepKey]) sessionData[keepKey] = { fCount: 0, oCount: 0 };
-    sessionData[keepKey].fCount = (sessionData[keepKey].fCount || 0) + (sessionData[intoKey].fCount || 0);
-    sessionData[keepKey].oCount = (sessionData[keepKey].oCount || 0) + (sessionData[intoKey].oCount || 0);
+    if (!sessionData[canonicalKey]) sessionData[canonicalKey] = { fCount: 0, oCount: 0 };
+    sessionData[canonicalKey].fCount = (sessionData[canonicalKey].fCount || 0) + (sessionData[intoKey].fCount || 0);
+    sessionData[canonicalKey].oCount = (sessionData[canonicalKey].oCount || 0) + (sessionData[intoKey].oCount || 0);
     delete sessionData[intoKey];
     saveSessionToServer();
   }
+  if (canonicalKey !== keepKey && sessionData[keepKey]) {
+    if (!sessionData[canonicalKey]) sessionData[canonicalKey] = { fCount: 0, oCount: 0 };
+    sessionData[canonicalKey].fCount = (sessionData[canonicalKey].fCount || 0) + (sessionData[keepKey].fCount || 0);
+    sessionData[canonicalKey].oCount = (sessionData[canonicalKey].oCount || 0) + (sessionData[keepKey].oCount || 0);
+    delete sessionData[keepKey];
+    saveSessionToServer();
+  }
 
-  // Supprimer côté serveur l'entrée fusionnée puis sauvegarder les stats du joueur conservé
+  // Supprimer côté serveur les(s) ancienne(s) clé(s) qui ne sont plus la bonne, puis sauvegarder
   try {
     await fetch(`/api/stats/${encodeURIComponent(intoKey)}`, { method: 'DELETE' });
+    if (canonicalKey !== keepKey) {
+      await fetch(`/api/stats/${encodeURIComponent(keepKey)}`, { method: 'DELETE' });
+    }
   } catch(e) {}
   await saveStats(stats);
 
