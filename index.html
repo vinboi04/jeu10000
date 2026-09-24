@@ -523,7 +523,7 @@ thead { position: sticky; top: 0; z-index: 10; }
       <button onclick="mergePlayerPrompt()" style="background:#1a0a2e;color:#c060ff;border:1px solid #c060ff;border-radius:8px;padding:8px 6px;font-size:11px;cursor:pointer">🔀 Fusionner</button>
     </div>
     <span style="font-size:10px;color:#444">Stats partagées entre tous les appareils</span><br>
-    <span style="font-size:9px;color:#333">Build v2026-09-19-34</span>
+    <span style="font-size:9px;color:#333">Build v2026-09-19-35</span>
   </div>
 </div>
 
@@ -1505,6 +1505,7 @@ function dice6() {
   }
 
   // Fin de tour auto
+  saveSessionToServer();
   turnScores[currentTurn][currentPlayer] = 0;
   advancePlayer();
   document.getElementById('score-input').value = '';
@@ -2333,6 +2334,7 @@ function ultimateNenette() {
   sd.oCount = 0;
 
   showToast(`✨ ${p.name} : Ultimate Nenette ! Tous les malus annulés !`);
+  saveSessionToServer();
 
   // Fin de tour auto
   turnScores[currentTurn][currentPlayer] = 0;
