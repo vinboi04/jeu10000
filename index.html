@@ -447,10 +447,7 @@ thead { position: sticky; top: 0; z-index: 10; }
     <button class="btn-fin" onclick="finDeTour()">FIN ▶</button>
   </div>
   <div class="dice-zone">
-    <button class="dice-btn dice-btn-1" onclick="dice1()">1·Éch.score</button>
-    <button class="dice-btn dice-btn-2" onclick="dice2()">2·+500</button>
-    <button class="dice-btn dice-btn-3" onclick="dice3()">3·Éch.place</button>
-    <button class="dice-btn dice-btn-6" onclick="dice6()">6·x+F+O</button>
+    <button class="dice-btn" style="background:#2a1a00;color:#ffaa00;border-color:#ffaa00;font-weight:bold" onclick="openCarreMenu()">🎲 CARRÉ</button>
     <button class="dice-btn dice-btn-n" onclick="ultimateNenette()">Ultimate Nenette</button>
   </div>
   <div class="table-wrapper">
@@ -508,6 +505,14 @@ thead { position: sticky; top: 0; z-index: 10; }
   </div>
 </div>
 
+<!-- POPUP D'INFO GÉNÉRIQUE (effets carré 4 et 5, limité aux dés / dé bonus) -->
+<div class="modal-overlay" id="info-modal">
+  <div class="modal-box">
+    <p id="info-modal-text" style="font-size:15px;margin-bottom:16px;color:#fff"></p>
+    <div id="info-modal-buttons" style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap"></div>
+  </div>
+</div>
+
 <!-- STATS SCREEN -->
 <div id="stats-screen">
   <div class="stats-topbar">
@@ -523,7 +528,7 @@ thead { position: sticky; top: 0; z-index: 10; }
       <button onclick="mergePlayerPrompt()" style="background:#1a0a2e;color:#c060ff;border:1px solid #c060ff;border-radius:8px;padding:8px 6px;font-size:11px;cursor:pointer">🔀 Fusionner</button>
     </div>
     <span style="font-size:10px;color:#444">Stats partagées entre tous les appareils</span><br>
-    <span style="font-size:9px;color:#333">Build v2026-09-19-35</span>
+    <span style="font-size:9px;color:#333">Build v2026-09-19-TEST-carre (à tester avant de pousser)</span>
   </div>
 </div>
 
@@ -532,6 +537,8 @@ thead { position: sticky; top: 0; z-index: 10; }
   <h2 id="winner-text">🏆</h2>
   <p id="winner-sub"></p>
   <button class="btn-new-game" onclick="newGame()">Nouvelle partie</button>
+  <button id="winner-undo-btn" onclick="undo()" style="background:none;border:1px solid #ff9090;color:#ff9090;border-radius:10px;padding:10px 24px;font-size:14px;cursor:pointer;margin-top:4px">↩ Annuler la victoire</button>
+  <button id="winner-carre-btn" onclick="openCarreMenu()" style="background:none;border:1px solid #ffaa00;color:#ffaa00;border-radius:10px;padding:10px 24px;font-size:14px;cursor:pointer;margin-top:4px">🎲 Carré</button>
   <button class="btn-continue" onclick="showStats()" style="border-color:#ffd700;color:#ffd700;margin-top:4px">📊 Voir les stats</button>
   <button id="winner-view-table-btn" onclick="continueGame()" style="display:none;background:none;border:1px solid #4dff91;color:#4dff91;border-radius:10px;padding:10px 24px;font-size:14px;cursor:pointer;margin-top:4px">👁 Voir le tableau final</button>
   <button id="winner-quit-btn" onclick="quitSpectator()" style="display:none;background:none;border:1px solid #c060ff;color:#c060ff;border-radius:10px;padding:10px 24px;font-size:14px;cursor:pointer;margin-top:4px">🚪 Quitter</button>
@@ -646,6 +653,7 @@ let currentPlayer = 0;
 let gameOver = false;
 let finalRoundTrigger = -1;
 let history = [];
+let lastActedPlayer = -1; // le joueur qui vient de terminer son tour — cible du bouton "Carré"
 
 // ═══════════════════════════════════════════
 // SETUP
@@ -1202,6 +1210,7 @@ function finDeTour() {
   saveHistory();
   const i = currentPlayer;
   const p = players[i];
+  lastActedPlayer = i;
 
   // Rule 2: zero streak
   if (scoreVal === 0) {
@@ -1259,6 +1268,7 @@ function passerTour() {
   document.getElementById('score-input').value = '';
   renderTable();
   updateTurnIndicator();
+  checkCarreTurnStartEffects();
 }
 
 // ═══════════════════════════════════════════
@@ -1289,7 +1299,10 @@ function advancePlayer() {
     const winner = players.reduce((best, p, idx) => p.total > players[best].total ? idx : best, 0);
     renderTable();
     showWinner(winner, false);
+    return;
   }
+
+  checkCarreTurnStartEffects();
 }
 
 // ═══════════════════════════════════════════
@@ -1410,6 +1423,7 @@ function dice2() {
   saveHistory();
   const i = currentPlayer;
   const p = players[i];
+  lastActedPlayer = i;
   p.total += 500;
   showToast(`${p.name} : +500 pts 🎉`);
   applyEqualityPenalties();
@@ -1474,6 +1488,7 @@ function dice6() {
   if (gameOver) return;
   saveHistory();
   const p = players[currentPlayer];
+  lastActedPlayer = currentPlayer;
   const key = normName(p.realName || p.name);
   if (!sessionData[key]) sessionData[key] = { fCount: 0, oCount: 0 };
   const sd = sessionData[key];
@@ -1514,17 +1529,192 @@ function dice6() {
 }
 
 // ═══════════════════════════════════════════
+// CARRÉ — dé magique appliqué après coup au joueur qui vient de marquer
+// ═══════════════════════════════════════════
+const CARRE_LABELS = {
+  1: '1 · Échange de score',
+  2: '2 · +500 points',
+  3: '3 · Échange de place',
+  4: '4 · Limité à 4 dés',
+  5: '5 · Dé bonus au prochain tour',
+  6: '6 · x + F + O',
+};
+
+function openCarreMenu() {
+  if (lastActedPlayer < 0 || !players[lastActedPlayer]) {
+    showToast('Aucun joueur à qui appliquer le carré pour le moment');
+    return;
+  }
+  document.getElementById('modal-title').textContent = `🎲 Dé magique de ${players[lastActedPlayer].name} — quel chiffre ?`;
+  const container = document.getElementById('modal-players');
+  container.innerHTML = '';
+  for (let n = 1; n <= 6; n++) {
+    const btn = document.createElement('button');
+    btn.className = 'modal-player-btn';
+    btn.textContent = CARRE_LABELS[n];
+    btn.onclick = () => { closeModal(); resolveCarre(n); };
+    container.appendChild(btn);
+  }
+  document.getElementById('dice-modal').classList.add('open');
+}
+
+function resolveCarre(n) {
+  const idx = lastActedPlayer;
+  if (idx < 0 || !players[idx]) return;
+  const p = players[idx];
+
+  if (n === 1) {
+    // Échange de score
+    openModal('Échanger le score avec…', idx, (targetIdx) => {
+      saveHistory();
+      const tmp = players[idx].total;
+      players[idx].total = players[targetIdx].total;
+      players[targetIdx].total = tmp;
+      players[idx].zeroStreak = 0;
+      players[targetIdx].zeroStreak = 0;
+      showToast(`🎲 Carré : ${players[idx].name} ↔ ${players[targetIdx].name} scores échangés !`);
+      applyEqualityPenalties();
+      renderTable();
+    });
+
+  } else if (n === 2) {
+    // +500
+    saveHistory();
+    p.total += 500;
+    showToast(`🎲 Carré : ${p.name} +500 pts !`);
+    applyEqualityPenalties();
+    if (p.total === 10000 && finalRoundTrigger === -1) {
+      gameOver = true;
+      clearGameState();
+      renderTable();
+      showWinner(idx, true);
+      return;
+    }
+    if (p.total > 10000 && finalRoundTrigger === -1) {
+      finalRoundTrigger = idx;
+      showToast(`${p.name} dépasse 10 000 ! Dernier tour pour les autres ! 🚨`);
+    }
+    renderTable();
+    updateTurnIndicator();
+
+  } else if (n === 3) {
+    // Échange de place
+    openModal('Échanger la place avec…', idx, (targetIdx) => {
+      saveHistory();
+      const tmpPlayer = JSON.parse(JSON.stringify(players[idx]));
+      players[idx] = JSON.parse(JSON.stringify(players[targetIdx]));
+      players[targetIdx] = tmpPlayer;
+      for (let t = 0; t < turnScores.length; t++) {
+        const tmp = turnScores[t][idx];
+        turnScores[t][idx] = turnScores[t][targetIdx];
+        turnScores[t][targetIdx] = tmp;
+      }
+      players[idx].zeroStreak = 0;
+      players[targetIdx].zeroStreak = 0;
+      showToast(`🎲 Carré : échange de place !`);
+      lastPlayerOrder = players.map(pp => ({ realName: pp.realName, name: pp.name }));
+      try { localStorage.setItem('jeu10000_playerOrder', JSON.stringify(lastPlayerOrder)); } catch(e) {}
+      renderTable();
+      updateTurnIndicator();
+    });
+
+  } else if (n === 4) {
+    // Limité à 4 dés, à chaque tour jusqu'à Stop
+    saveHistory();
+    p.limitedDiceActive = true;
+    showToast(`🎲 Carré : ${p.name} limité à 4 dés à partir de son prochain tour`);
+    renderTable();
+
+  } else if (n === 5) {
+    // Dé bonus, une seule fois
+    saveHistory();
+    p.bonusDieNextTurn = true;
+    showToast(`🎲 Carré : ${p.name} aura un dé bonus à son prochain tour`);
+    renderTable();
+
+  } else if (n === 6) {
+    // x + F + O
+    saveHistory();
+    const key = normName(p.realName || p.name);
+    if (!sessionData[key]) sessionData[key] = { fCount: 0, oCount: 0 };
+    const sd = sessionData[key];
+    sd.fCount++;
+    p.fCount = (p.fCount || 0) + 1;
+    if (sd.fCount % 3 === 0) {
+      applyMinus500(idx);
+      applyEqualityPenalties();
+      showToast(`${p.name} : 3 F ! -500 pts 💀`);
+    }
+    sd.oCount++;
+    p.oCount = (p.oCount || 0) + 1;
+    if (sd.oCount % 3 === 0) {
+      p.skipNextTurn = true;
+      showToast(`${p.name} : 3 O ! Tour suivant sauté ⏭`);
+    }
+    p.zeroStreak++;
+    p.xCount = (p.xCount || 0) + 1;
+    if (p.zeroStreak === 3) {
+      applyMinus500(idx);
+      applyEqualityPenalties();
+      showToast(`${p.name} : 3x zéro (carré) ! -500 pts 💀`);
+    }
+    saveSessionToServer();
+    renderTable();
+    updateTurnIndicator();
+  }
+}
+
+// Vérifie, au moment où un joueur récupère la main, s'il a un effet carré en attente (4 ou 5)
+function checkCarreTurnStartEffects() {
+  if (gameOver || spectatorMode) return;
+  const p = players[currentPlayer];
+  if (!p) return;
+  if (p.limitedDiceActive) {
+    showInfoPopup(`🎲 ${p.name} : tu n'as le droit qu'à 4 dés ce tour-ci !`, [
+      { label: 'OK' },
+      { label: 'Stop (ne plus rappeler)', onClick: () => { p.limitedDiceActive = false; renderTable(); } }
+    ]);
+  } else if (p.bonusDieNextTurn) {
+    p.bonusDieNextTurn = false;
+    renderTable();
+    showInfoPopup(`🎲 ${p.name} : tu as le droit à un dé bonus ce tour-ci !`, [
+      { label: 'OK' }
+    ]);
+  }
+}
+
+// Popup d'info générique (texte + boutons personnalisés)
+function showInfoPopup(text, buttons) {
+  document.getElementById('info-modal-text').textContent = text;
+  const c = document.getElementById('info-modal-buttons');
+  c.innerHTML = '';
+  buttons.forEach(b => {
+    const btn = document.createElement('button');
+    btn.className = 'modal-player-btn';
+    btn.textContent = b.label;
+    btn.onclick = () => { closeInfoPopup(); if (b.onClick) b.onClick(); };
+    c.appendChild(btn);
+  });
+  document.getElementById('info-modal').classList.add('open');
+}
+
+function closeInfoPopup() {
+  document.getElementById('info-modal').classList.remove('open');
+}
+
+// ═══════════════════════════════════════════
 // MODAL
 // ═══════════════════════════════════════════
 let modalCallback = null;
 
-function openModal(title, excludeSelf, callback) {
+function openModal(title, excludeIdx, callback) {
   modalCallback = callback;
   document.getElementById('modal-title').textContent = title;
   const container = document.getElementById('modal-players');
   container.innerHTML = '';
+  const exclude = (excludeIdx === true) ? currentPlayer : excludeIdx; // true = comportement historique (exclut le joueur courant)
   players.forEach((p, i) => {
-    if (excludeSelf && i === currentPlayer) return;
+    if (exclude !== null && exclude !== undefined && exclude !== false && i === exclude) return;
     const btn = document.createElement('button');
     btn.className = 'modal-player-btn';
     btn.textContent = `${i+1}. ${p.name} (${p.total.toLocaleString('fr-FR')} pts)`;
@@ -2449,6 +2639,10 @@ function initSpectatorMode(key) {
   // Le spectateur ne doit pas pouvoir démarrer une nouvelle partie depuis l'écran gagnant
   const newGameBtn = document.querySelector('.btn-new-game');
   if (newGameBtn) newGameBtn.style.display = 'none';
+  const undoBtn = document.getElementById('winner-undo-btn');
+  if (undoBtn) undoBtn.style.display = 'none';
+  const carreBtn = document.getElementById('winner-carre-btn');
+  if (carreBtn) carreBtn.style.display = 'none';
   const viewTableBtn = document.getElementById('winner-view-table-btn');
   const winnerQuitBtn = document.getElementById('winner-quit-btn');
   if (viewTableBtn) viewTableBtn.style.display = 'inline-block';
