@@ -537,8 +537,7 @@ thead { position: sticky; top: 0; z-index: 10; }
   <h2 id="winner-text">🏆</h2>
   <p id="winner-sub"></p>
   <button class="btn-new-game" onclick="newGame()">Nouvelle partie</button>
-  <button id="winner-undo-btn" onclick="undo()" style="background:none;border:1px solid #ff9090;color:#ff9090;border-radius:10px;padding:10px 24px;font-size:14px;cursor:pointer;margin-top:4px">↩ Annuler la victoire</button>
-  <button id="winner-carre-btn" onclick="openCarreMenu()" style="background:none;border:1px solid #ffaa00;color:#ffaa00;border-radius:10px;padding:10px 24px;font-size:14px;cursor:pointer;margin-top:4px">🎲 Carré</button>
+  <button id="winner-undo-btn" onclick="openCarreMenu()" style="background:none;border:1px solid #ffaa00;color:#ffaa00;border-radius:10px;padding:10px 24px;font-size:14px;cursor:pointer;margin-top:4px">🎲 Carré de la dernière chance</button>
   <button class="btn-continue" onclick="showStats()" style="border-color:#ffd700;color:#ffd700;margin-top:4px">📊 Voir les stats</button>
   <button id="winner-view-table-btn" onclick="continueGame()" style="display:none;background:none;border:1px solid #4dff91;color:#4dff91;border-radius:10px;padding:10px 24px;font-size:14px;cursor:pointer;margin-top:4px">👁 Voir le tableau final</button>
   <button id="winner-quit-btn" onclick="quitSpectator()" style="display:none;background:none;border:1px solid #c060ff;color:#c060ff;border-radius:10px;padding:10px 24px;font-size:14px;cursor:pointer;margin-top:4px">🚪 Quitter</button>
@@ -1239,9 +1238,14 @@ function finDeTour() {
     showWinner(i, true);
     return;
   }
-  if (p.total > 10000 && finalRoundTrigger === -1) {
-    finalRoundTrigger = i;
-    showToast(`${p.name} dépasse 10 000 ! Dernier tour pour les autres ! 🚨`);
+  if (p.total > 10000) {
+    p.exceededLimit = true;
+    if (finalRoundTrigger === -1) {
+      finalRoundTrigger = i;
+      showToast(`${p.name} dépasse 10 000 ! Dernier tour pour les autres ! 🚨`);
+    } else {
+      showToast(`${p.name} dépasse 10 000 aussi ! Il ne rejouera plus 🚨`);
+    }
   }
 
   advancePlayer();
@@ -1299,6 +1303,14 @@ function advancePlayer() {
     const winner = players.reduce((best, p, idx) => p.total > players[best].total ? idx : best, 0);
     renderTable();
     showWinner(winner, false);
+    return;
+  }
+
+  // Un joueur ayant déjà dépassé 10 000 (même via un échange plus tôt) ne rejoue jamais
+  if (players[currentPlayer].exceededLimit) {
+    turnScores[currentTurn][currentPlayer] = 'SKIP';
+    showToast(`${players[currentPlayer].name} a dépassé 10 000, il ne rejoue plus ⏭`);
+    advancePlayer();
     return;
   }
 
@@ -1437,9 +1449,14 @@ function dice2() {
     showWinner(i, true);
     return;
   }
-  if (p.total > 10000 && finalRoundTrigger === -1) {
-    finalRoundTrigger = i;
-    showToast(`${p.name} dépasse 10 000 ! Dernier tour pour les autres ! 🚨`);
+  if (p.total > 10000) {
+    p.exceededLimit = true;
+    if (finalRoundTrigger === -1) {
+      finalRoundTrigger = i;
+      showToast(`${p.name} dépasse 10 000 ! Dernier tour pour les autres ! 🚨`);
+    } else {
+      showToast(`${p.name} dépasse 10 000 aussi ! Il ne rejouera plus 🚨`);
+    }
   }
 
   advancePlayer();
@@ -1558,6 +1575,64 @@ function openCarreMenu() {
   document.getElementById('dice-modal').classList.add('open');
 }
 
+// Réévalue la victoire / manche finale après qu'un effet carré (échange, +500...) ait modifié
+// le score d'un ou plusieurs joueurs. Gère aussi la réouverture d'une "pseudo victoire" (pile
+// 10 000) si le score gagnant a été repris par un échange — sans jamais faire de vrai undo :
+// tous les points en cours sont conservés tels quels.
+function reevaluateAfterCarreScoreChange(affectedIndices) {
+  const exactWinnerIdx = affectedIndices.find(i => players[i].total === 10000);
+
+  if (gameOver && finalRoundTrigger === -1) {
+    // La partie avait été terminée par une victoire "pile 10 000" (pas par fin de manche finale).
+    if (exactWinnerIdx !== undefined) {
+      // Toujours pile 10 000 (même joueur ou un autre après l'échange) : victoire confirmée/transférée.
+      renderTable();
+      showWinner(exactWinnerIdx, true);
+    } else {
+      // Plus personne à 10 000 pile : on remet la partie en jeu SANS toucher aux scores.
+      gameOver = false;
+      document.getElementById('winner-overlay').style.display = 'none';
+      showToast('🎲 La victoire est remise en jeu !');
+      advancePlayer(); // le tour du joueur qui "avait gagné" est maintenant bien terminé
+      renderTable();
+      updateTurnIndicator();
+    }
+    return;
+  }
+
+  // Partie pas (encore) terminée à ce stade : vérifications normales de victoire / manche finale.
+  if (exactWinnerIdx !== undefined && finalRoundTrigger === -1) {
+    gameOver = true;
+    clearGameState();
+    renderTable();
+    showWinner(exactWinnerIdx, true);
+    return;
+  }
+  affectedIndices.forEach(i => {
+    if (players[i].total > 10000) {
+      players[i].exceededLimit = true;
+      if (finalRoundTrigger === -1) {
+        // Personne n'avait encore dépassé 10 000 dans cette partie : ce joueur devient
+        // l'ancre qui détermine la fin de la manche finale.
+        finalRoundTrigger = i;
+        showToast(`${players[i].name} dépasse 10 000 ! Dernier tour pour les autres ! 🚨`);
+      } else {
+        // Quelqu'un d'autre est déjà l'ancre — on ne la déplace pas, mais ce joueur-ci
+        // est lui aussi définitivement grillé.
+        showToast(`${players[i].name} dépasse 10 000 (par échange) ! Il ne rejoue plus 🚨`);
+      }
+      // Règle de base : dépasser 10 000 (même par échange) retire immédiatement le droit
+      // de jouer, y compris le tour en cours s'il n'a pas encore été joué.
+      if (currentPlayer === i && !gameOver) {
+        if (turnScores[currentTurn]) turnScores[currentTurn][i] = 'SKIP';
+        advancePlayer();
+      }
+    }
+  });
+  renderTable();
+  updateTurnIndicator();
+}
+
 function resolveCarre(n) {
   const idx = lastActedPlayer;
   if (idx < 0 || !players[idx]) return;
@@ -1574,7 +1649,7 @@ function resolveCarre(n) {
       players[targetIdx].zeroStreak = 0;
       showToast(`🎲 Carré : ${players[idx].name} ↔ ${players[targetIdx].name} scores échangés !`);
       applyEqualityPenalties();
-      renderTable();
+      reevaluateAfterCarreScoreChange([idx, targetIdx]);
     });
 
   } else if (n === 2) {
@@ -1583,19 +1658,7 @@ function resolveCarre(n) {
     p.total += 500;
     showToast(`🎲 Carré : ${p.name} +500 pts !`);
     applyEqualityPenalties();
-    if (p.total === 10000 && finalRoundTrigger === -1) {
-      gameOver = true;
-      clearGameState();
-      renderTable();
-      showWinner(idx, true);
-      return;
-    }
-    if (p.total > 10000 && finalRoundTrigger === -1) {
-      finalRoundTrigger = idx;
-      showToast(`${p.name} dépasse 10 000 ! Dernier tour pour les autres ! 🚨`);
-    }
-    renderTable();
-    updateTurnIndicator();
+    reevaluateAfterCarreScoreChange([idx]);
 
   } else if (n === 3) {
     // Échange de place
@@ -1614,8 +1677,7 @@ function resolveCarre(n) {
       showToast(`🎲 Carré : échange de place !`);
       lastPlayerOrder = players.map(pp => ({ realName: pp.realName, name: pp.name }));
       try { localStorage.setItem('jeu10000_playerOrder', JSON.stringify(lastPlayerOrder)); } catch(e) {}
-      renderTable();
-      updateTurnIndicator();
+      reevaluateAfterCarreScoreChange([idx, targetIdx]);
     });
 
   } else if (n === 4) {
@@ -1737,7 +1799,7 @@ function saveHistory() {
     players: players.map(p => ({...p})),
     sessionData: JSON.parse(JSON.stringify(sessionData)),
     turnScores: turnScores.map(t => [...t]),
-    currentTurn, currentPlayer, gameOver, finalRoundTrigger,
+    currentTurn, currentPlayer, gameOver, finalRoundTrigger, lastActedPlayer,
   }));
 }
 
@@ -1751,10 +1813,13 @@ function undo() {
   currentPlayer = snap.currentPlayer;
   gameOver = snap.gameOver;
   finalRoundTrigger = snap.finalRoundTrigger;
+  lastActedPlayer = (snap.lastActedPlayer !== undefined) ? snap.lastActedPlayer : -1;
   document.getElementById('score-input').value = '';
   document.getElementById('winner-overlay').style.display = 'none';
+  scReset();
   renderTable();
   updateTurnIndicator();
+  checkCarreTurnStartEffects();
 }
 
 // ═══════════════════════════════════════════
@@ -2641,8 +2706,6 @@ function initSpectatorMode(key) {
   if (newGameBtn) newGameBtn.style.display = 'none';
   const undoBtn = document.getElementById('winner-undo-btn');
   if (undoBtn) undoBtn.style.display = 'none';
-  const carreBtn = document.getElementById('winner-carre-btn');
-  if (carreBtn) carreBtn.style.display = 'none';
   const viewTableBtn = document.getElementById('winner-view-table-btn');
   const winnerQuitBtn = document.getElementById('winner-quit-btn');
   if (viewTableBtn) viewTableBtn.style.display = 'inline-block';
