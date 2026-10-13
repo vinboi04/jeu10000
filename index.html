@@ -303,6 +303,10 @@ thead { position: sticky; top: 0; z-index: 10; }
 .modal-box h3 { color: #e94560; font-size: 15px; margin-bottom: 12px; text-align: center; }
 .modal-player-btn { display: block; width: 100%; background: #0f3460; color: #fff; border: 1px solid #2a4080; border-radius: 8px; padding: 10px; margin-bottom: 8px; font-size: 15px; cursor: pointer; text-align: center; }
 .modal-player-btn:active { background: #e94560; }
+@keyframes fx-pop { 0% { transform: scale(.6); opacity: 0; } 60% { transform: scale(1.08); opacity: 1; } 100% { transform: scale(1); } }
+@keyframes fx-shake { 0%,100% { transform: translateX(0); } 15% { transform: translateX(-8px); } 30% { transform: translateX(8px); } 45% { transform: translateX(-6px); } 60% { transform: translateX(6px); } 75% { transform: translateX(-3px); } }
+.fx-pop { animation: fx-pop .45s ease-out; }
+.fx-shake { animation: fx-shake .5s ease-in-out; }
 .modal-cancel { background: transparent; color: #888; border: 1px solid #444; border-radius: 8px; padding: 8px; width: 100%; font-size: 13px; cursor: pointer; margin-top: 4px; }
 
 /* Winner */
@@ -505,6 +509,16 @@ thead { position: sticky; top: 0; z-index: 10; }
   </div>
 </div>
 
+<!-- POPUP ANIMÉ (dé magique 5 = DÉ BONUS, dé magique 6 = ZUT) -->
+<div class="modal-overlay" id="fx-modal" style="justify-content:center;padding-top:0">
+  <canvas id="fx-canvas" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none"></canvas>
+  <div class="modal-box" id="fx-box" style="position:relative;text-align:center">
+    <div id="fx-title" style="font-size:36px;font-weight:bold;letter-spacing:2px;margin:8px 0"></div>
+    <p id="fx-sub" style="font-size:14px;color:#ccc;margin-bottom:16px"></p>
+    <button class="modal-player-btn" onclick="closeFxPopup()">OK</button>
+  </div>
+</div>
+
 <!-- POPUP D'INFO GÉNÉRIQUE (effets carré 4 et 5, limité aux dés / dé bonus) -->
 <div class="modal-overlay" id="info-modal">
   <div class="modal-box">
@@ -528,7 +542,7 @@ thead { position: sticky; top: 0; z-index: 10; }
       <button onclick="mergePlayerPrompt()" style="background:#1a0a2e;color:#c060ff;border:1px solid #c060ff;border-radius:8px;padding:8px 6px;font-size:11px;cursor:pointer">🔀 Fusionner</button>
     </div>
     <span style="font-size:10px;color:#444">Stats partagées entre tous les appareils</span><br>
-    <span style="font-size:9px;color:#333">Build v2026-09-19-TEST-carre (à tester avant de pousser)</span>
+    <span style="font-size:9px;color:#333">Build v2026-10-13-02 (fix gagnant stats)</span>
   </div>
 </div>
 
@@ -638,7 +652,7 @@ async function saveSessionToServer() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(sessionData)
     });
-  } catch(e) { sessionOffline = true; }
+  } catch(e) { /* échec d'envoi ponctuel : le prochain envoi renverra l'état complet, on ne bloque pas */ }
 }
 
 // ═══════════════════════════════════════════
@@ -652,6 +666,9 @@ let currentPlayer = 0;
 let gameOver = false;
 let finalRoundTrigger = -1;
 let history = [];
+let lastActedTurn = -1;      // tour dans lequel ce joueur vient de jouer (pour placer les lignes -500 d'un carré)
+let penaltyRows = [];        // lignes dédiées "-500" affichées dans le tableau : { turn, cells[] }
+let carreContextTurn = -1;   // >= 0 pendant la résolution d'un carré (tour auquel rattacher les -500)
 let lastActedPlayer = -1; // le joueur qui vient de terminer son tour — cible du bouton "Carré"
 
 // ═══════════════════════════════════════════
@@ -771,6 +788,8 @@ async function startGame() {
   finalRoundTrigger = -1;
   history = [];
   gamePoopCount = 0;
+  penaltyRows = [];
+  lastGameRecord = null;
   scReset(); // repart sur un pavé de score neutre (pas de reliquat rouge de la partie précédente)
 
   // Sauvegarder l'ordre de départ
@@ -822,34 +841,73 @@ function renderTable() {
   const tbody = document.getElementById('score-tbody');
   tbody.innerHTML = '';
 
+  const SEG_SUFFIX = ['', 'bis', 'ter', 'qua', 'qui'];
   for (let t = currentTurn; t >= 0; t--) {
-    const tr = document.createElement('tr');
-    tr.className = t === currentTurn - 1 ? 'row-score last-turn' : 'row-score';
-    const label = document.createElement('td');
-    label.style.cssText = t === currentTurn - 1
-      ? 'font-size:9px;color:#7ec8a0;background:#1a2a1a;font-weight:bold'
-      : 'font-size:9px;color:#444;background:#111827';
-    label.textContent = `T.${t+1}`;
-    tr.appendChild(label);
+    const pens = penaltyRows.filter(r => r.turn === t);   // ordre chronologique
+    const K = pens.length;
+    // Ligne d'un score déjà écrit = nombre de lignes -500 qui existaient AVANT son écriture
+    const segOf = (i) => {
+      let after = 0;
+      pens.forEach(pr => { if (!pr.filled || pr.filled[i]) after++; });
+      return K - after;
+    };
+    // De haut en bas : segment K, -500 n°K, segment K-1, ... , -500 n°1, segment 0
+    for (let sg = K; sg >= 0; sg--) {
+      const tr = document.createElement('tr');
+      tr.className = t === currentTurn - 1 ? 'row-score last-turn' : 'row-score';
+      const label = document.createElement('td');
+      label.style.cssText = t === currentTurn - 1
+        ? 'font-size:9px;color:#7ec8a0;background:#1a2a1a;font-weight:bold'
+        : 'font-size:9px;color:#444;background:#111827';
+      label.textContent = sg === 0 ? `T.${t+1}` : `${t+1}${SEG_SUFFIX[sg] || ('+' + sg)}`;
+      tr.appendChild(label);
 
-    players.forEach((p, i) => {
-      const td = document.createElement('td');
-      const val = turnScores[t] ? turnScores[t][i] : null;
-      if (i === currentPlayer && t === currentTurn) {
-        td.className = 'active current'; td.textContent = '…';
-      } else if (val === null) {
-        td.textContent = '';
-      } else if (val === 'SKIP') {
-        td.className = 'skip-td'; td.textContent = 'SKIP';
-        if (i === currentPlayer) td.classList.add('active');
-      } else {
-        td.textContent = val >= 0 ? `+${val}` : `${val}`;
-        td.className = val < 0 ? 'neg' : (val > 0 ? 'pos' : '');
-        if (i === currentPlayer) td.classList.add('active');
+      let hasContent = false;
+      players.forEach((p, i) => {
+        const td = document.createElement('td');
+        const val = turnScores[t] ? turnScores[t][i] : null;
+        if (i === currentPlayer && t === currentTurn) {
+          if (sg === K) { td.className = 'active current'; td.textContent = '…'; hasContent = true; }
+        } else if (val === null || val === undefined) {
+          td.textContent = '';
+        } else if (segOf(i) !== sg) {
+          td.textContent = ''; // ce score est sur une autre ligne du même tour
+        } else if (val === 'SKIP') {
+          td.className = 'skip-td'; td.textContent = 'SKIP';
+          if (i === currentPlayer) td.classList.add('active');
+          hasContent = true;
+        } else {
+          td.textContent = val >= 0 ? `+${val}` : `${val}`;
+          td.className = val < 0 ? 'neg' : (val > 0 ? 'pos' : '');
+          if (i === currentPlayer) td.classList.add('active');
+          hasContent = true;
+        }
+        tr.appendChild(td);
+      });
+      if (hasContent) tbody.appendChild(tr);
+
+      // La ligne "-500" qui sépare ce segment du précédent
+      if (sg > 0) {
+        const pr = pens[sg - 1];
+        const ptr = document.createElement('tr');
+        ptr.className = 'row-penalty';
+        const plabel = document.createElement('td');
+        plabel.style.cssText = 'font-size:9px;color:#ff6b6b;background:#2a1015;font-weight:bold';
+        plabel.textContent = '⚠';
+        ptr.appendChild(plabel);
+        players.forEach((_, i) => {
+          const ptd = document.createElement('td');
+          if (pr.cells[i] != null) {
+            ptd.textContent = String(pr.cells[i]);
+            ptd.style.cssText = 'color:#ff4d4d;font-weight:bold;background:#2a1015;font-size:12px;padding:3px 2px';
+          } else {
+            ptd.style.cssText = 'background:#2a1015;padding:3px 2px';
+          }
+          ptr.appendChild(ptd);
+        });
+        tbody.appendChild(ptr);
       }
-      tr.appendChild(td);
-    });
-    tbody.appendChild(tr);
+    }
   }
 
   // Header cells
@@ -905,7 +963,7 @@ function saveGameState() {
   if (spectatorMode || gameOver || !players.length) return;
   try {
     localStorage.setItem('jeu10000_gameState', JSON.stringify({
-      players, turnScores, currentTurn, currentPlayer, gameOver, finalRoundTrigger, history, gamePoopCount,
+      players, turnScores, currentTurn, currentPlayer, gameOver, finalRoundTrigger, history, gamePoopCount, penaltyRows,
       savedAt: Date.now()
     }));
   } catch(e) {}
@@ -939,7 +997,7 @@ function doPushLiveGameNow() {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       masterName: players[0].name,
-      data: { players, turnScores, currentTurn, currentPlayer, gameOver, finalRoundTrigger, history, gamePoopCount, winner, lastEvent: lastToastEvent }
+      data: { players, turnScores, currentTurn, currentPlayer, gameOver, finalRoundTrigger, history, gamePoopCount, winner, lastEvent: lastToastEvent, lastFx: lastFxEvent, penaltyRows, sessionData }
     })
   }).catch(() => {}); // silencieux : pas de réseau ne doit jamais bloquer le maître
 }
@@ -999,6 +1057,7 @@ function tryRestoreGameState() {
   finalRoundTrigger = saved.finalRoundTrigger;
   history = saved.history || [];
   gamePoopCount = saved.gamePoopCount || 0;
+  penaltyRows = saved.penaltyRows || [];
 
   document.getElementById('setup-screen').style.display = 'none';
   document.getElementById('game-screen').style.display = 'flex';
@@ -1031,6 +1090,12 @@ function updateTurnIndicator() {
       b1.className = 'gap-badge gap-badge-1';
       b1.textContent = `à ${gap1} pts de ${above1.name}`;
       gapZone.appendChild(b1);
+      if (myRank === 1) {
+        const b10k = document.createElement('span');
+        b10k.className = 'gap-badge gap-badge-2';
+        b10k.textContent = `à ${Math.max(0, 10000 - p.total)} pts de 10 000`;
+        gapZone.appendChild(b10k);
+      }
     }
     if (myRank > 1) {
       const above2 = sorted[myRank - 2];
@@ -1168,14 +1233,32 @@ function applyMinus500(idx) {
   players[idx].zeroStreak = 0;
   players[idx].minus500Count = (players[idx].minus500Count || 0) + 1;
   gamePoopCount++;
+  addPenaltyRow(idx);
   poopRain();
+}
+
+// Ajoute une ligne dédiée "-500" au tableau : une ligne par -500. On retient quelles cases du
+// tour étaient déjà écrites à cet instant : les scores écrits ensuite iront sur une nouvelle
+// ligne du même tour (6bis, 6ter...), les autres cases restant vides.
+function addPenaltyRow(idx) {
+  let turn = (carreContextTurn >= 0) ? carreContextTurn : currentTurn;
+  let filled = (turnScores[turn] || []).map(v => v !== null && v !== undefined);
+  // Avant le moindre score du tour (ex. 3e F avant d'écrire son score) : le -500 clôt le tour
+  // précédent, il ne coupe pas le tour en cours en "bis".
+  if (turn > 0 && !filled.some(Boolean)) {
+    turn = turn - 1;
+    filled = Array(players.length).fill(true);
+  }
+  const cells = Array(players.length).fill(null);
+  cells[idx] = -500;
+  penaltyRows.push({ turn, cells, filled });
 }
 
 // ═══════════════════════════════════════════
 // EQUALITY PENALTY — Rule 1 (cascade)
 // ═══════════════════════════════════════════
-function applyEqualityPenalties() {
-  let mover = currentPlayer;
+function applyEqualityPenalties(moverIdx) {
+  let mover = (moverIdx !== undefined) ? moverIdx : currentPlayer;
   let changed = true;
   while (changed) {
     changed = false;
@@ -1209,7 +1292,9 @@ function finDeTour() {
   saveHistory();
   const i = currentPlayer;
   const p = players[i];
-  lastActedPlayer = i;
+  lastActedPlayer = i; lastActedTurn = currentTurn;
+
+  turnScores[currentTurn][i] = scoreVal; // écrit AVANT d'éventuelles pénalités (il appartient à la ligne d'avant le -500)
 
   // Rule 2: zero streak
   if (scoreVal === 0) {
@@ -1224,7 +1309,6 @@ function finDeTour() {
   }
 
   p.total += scoreVal;
-  turnScores[currentTurn][i] = scoreVal;
   if (scoreVal > 0) p.bestTurn = Math.max(p.bestTurn || 0, scoreVal);
 
   // Rule 1
@@ -1382,6 +1466,8 @@ function addO() {
   if (!sessionData[key]) sessionData[key] = { fCount: 0, oCount: 0 };
   const sd = sessionData[key];
 
+  turnScores[currentTurn][currentPlayer] = 0; // le "0" du tour est écrit AVANT une éventuelle pénalité (3x)
+
   // +1 O
   sd.oCount++;
   p.oCount = (p.oCount || 0) + 1;
@@ -1435,7 +1521,7 @@ function dice2() {
   saveHistory();
   const i = currentPlayer;
   const p = players[i];
-  lastActedPlayer = i;
+  lastActedPlayer = i; lastActedTurn = currentTurn;
   p.total += 500;
   showToast(`${p.name} : +500 pts 🎉`);
   applyEqualityPenalties();
@@ -1505,7 +1591,7 @@ function dice6() {
   if (gameOver) return;
   saveHistory();
   const p = players[currentPlayer];
-  lastActedPlayer = currentPlayer;
+  lastActedPlayer = currentPlayer; lastActedTurn = currentTurn;
   const key = normName(p.realName || p.name);
   if (!sessionData[key]) sessionData[key] = { fCount: 0, oCount: 0 };
   const sd = sessionData[key];
@@ -1587,9 +1673,10 @@ function reevaluateAfterCarreScoreChange(affectedIndices) {
     if (exactWinnerIdx !== undefined) {
       // Toujours pile 10 000 (même joueur ou un autre après l'échange) : victoire confirmée/transférée.
       renderTable();
-      showWinner(exactWinnerIdx, true);
+      showWinner(exactWinnerIdx, true, true);
     } else {
       // Plus personne à 10 000 pile : on remet la partie en jeu SANS toucher aux scores.
+      cancelRecordedGame().catch(() => {});
       gameOver = false;
       document.getElementById('winner-overlay').style.display = 'none';
       showToast('🎲 La victoire est remise en jeu !');
@@ -1597,6 +1684,15 @@ function reevaluateAfterCarreScoreChange(affectedIndices) {
       renderTable();
       updateTurnIndicator();
     }
+    return;
+  }
+
+  // Partie terminée par fin de manche finale (quelqu'un a dépassé 10 000) : un carré de la dernière
+  // chance a pu changer le classement → on recalcule le vainqueur et on corrige les stats.
+  if (gameOver) {
+    const winnerIdx = players.reduce((best, p, i) => p.total > players[best].total ? i : best, 0);
+    renderTable();
+    showWinner(winnerIdx, false, true);
     return;
   }
 
@@ -1633,6 +1729,11 @@ function reevaluateAfterCarreScoreChange(affectedIndices) {
   updateTurnIndicator();
 }
 
+function inCarreContext(fn) {
+  carreContextTurn = lastActedTurn;
+  try { fn(); } finally { carreContextTurn = -1; }
+}
+
 function resolveCarre(n) {
   const idx = lastActedPlayer;
   if (idx < 0 || !players[idx]) return;
@@ -1640,7 +1741,7 @@ function resolveCarre(n) {
 
   if (n === 1) {
     // Échange de score
-    openModal('Échanger le score avec…', idx, (targetIdx) => {
+    openModal('Échanger le score avec…', idx, (targetIdx) => inCarreContext(() => {
       saveHistory();
       const tmp = players[idx].total;
       players[idx].total = players[targetIdx].total;
@@ -1648,21 +1749,24 @@ function resolveCarre(n) {
       players[idx].zeroStreak = 0;
       players[targetIdx].zeroStreak = 0;
       showToast(`🎲 Carré : ${players[idx].name} ↔ ${players[targetIdx].name} scores échangés !`);
-      applyEqualityPenalties();
+      applyEqualityPenalties(idx);
       reevaluateAfterCarreScoreChange([idx, targetIdx]);
-    });
+    }));
 
   } else if (n === 2) {
     // +500
-    saveHistory();
-    p.total += 500;
-    showToast(`🎲 Carré : ${p.name} +500 pts !`);
-    applyEqualityPenalties();
-    reevaluateAfterCarreScoreChange([idx]);
+    inCarreContext(() => {
+      saveHistory();
+      p.total += 500;
+      showToast(`🎲 Carré : ${p.name} +500 pts !`);
+      applyEqualityPenalties(idx);
+      reevaluateAfterCarreScoreChange([idx]);
+    });
+    showFxPopup('plus500', `${p.name} : +500 pts !`);
 
   } else if (n === 3) {
     // Échange de place
-    openModal('Échanger la place avec…', idx, (targetIdx) => {
+    openModal('Échanger la place avec…', idx, (targetIdx) => inCarreContext(() => {
       saveHistory();
       const tmpPlayer = JSON.parse(JSON.stringify(players[idx]));
       players[idx] = JSON.parse(JSON.stringify(players[targetIdx]));
@@ -1674,11 +1778,15 @@ function resolveCarre(n) {
       }
       players[idx].zeroStreak = 0;
       players[targetIdx].zeroStreak = 0;
+      penaltyRows.forEach(r => {
+        const tmpc = r.cells[idx]; r.cells[idx] = r.cells[targetIdx]; r.cells[targetIdx] = tmpc;
+        if (r.filled) { const tmpf = r.filled[idx]; r.filled[idx] = r.filled[targetIdx]; r.filled[targetIdx] = tmpf; }
+      });
       showToast(`🎲 Carré : échange de place !`);
       lastPlayerOrder = players.map(pp => ({ realName: pp.realName, name: pp.name }));
       try { localStorage.setItem('jeu10000_playerOrder', JSON.stringify(lastPlayerOrder)); } catch(e) {}
       reevaluateAfterCarreScoreChange([idx, targetIdx]);
-    });
+    }));
 
   } else if (n === 4) {
     // Limité à 4 dés, à chaque tour jusqu'à Stop
@@ -1693,36 +1801,40 @@ function resolveCarre(n) {
     p.bonusDieNextTurn = true;
     showToast(`🎲 Carré : ${p.name} aura un dé bonus à son prochain tour`);
     renderTable();
+    showFxPopup('bonus', `${p.name} : un dé bonus à son prochain tour`);
 
   } else if (n === 6) {
     // x + F + O
-    saveHistory();
-    const key = normName(p.realName || p.name);
-    if (!sessionData[key]) sessionData[key] = { fCount: 0, oCount: 0 };
-    const sd = sessionData[key];
-    sd.fCount++;
-    p.fCount = (p.fCount || 0) + 1;
-    if (sd.fCount % 3 === 0) {
-      applyMinus500(idx);
-      applyEqualityPenalties();
-      showToast(`${p.name} : 3 F ! -500 pts 💀`);
-    }
-    sd.oCount++;
-    p.oCount = (p.oCount || 0) + 1;
-    if (sd.oCount % 3 === 0) {
-      p.skipNextTurn = true;
-      showToast(`${p.name} : 3 O ! Tour suivant sauté ⏭`);
-    }
-    p.zeroStreak++;
-    p.xCount = (p.xCount || 0) + 1;
-    if (p.zeroStreak === 3) {
-      applyMinus500(idx);
-      applyEqualityPenalties();
-      showToast(`${p.name} : 3x zéro (carré) ! -500 pts 💀`);
-    }
-    saveSessionToServer();
-    renderTable();
-    updateTurnIndicator();
+    inCarreContext(() => {
+      saveHistory();
+      const key = normName(p.realName || p.name);
+      if (!sessionData[key]) sessionData[key] = { fCount: 0, oCount: 0 };
+      const sd = sessionData[key];
+      sd.fCount++;
+      p.fCount = (p.fCount || 0) + 1;
+      if (sd.fCount % 3 === 0) {
+        applyMinus500(idx);
+        applyEqualityPenalties(idx);
+        showToast(`${p.name} : 3 F ! -500 pts 💀`);
+      }
+      sd.oCount++;
+      p.oCount = (p.oCount || 0) + 1;
+      if (sd.oCount % 3 === 0) {
+        p.skipNextTurn = true;
+        showToast(`${p.name} : 3 O ! Tour suivant sauté ⏭`);
+      }
+      p.zeroStreak++;
+      p.xCount = (p.xCount || 0) + 1;
+      if (p.zeroStreak === 3) {
+        applyMinus500(idx);
+        applyEqualityPenalties(idx);
+        showToast(`${p.name} : 3x zéro (carré) ! -500 pts 💀`);
+      }
+      saveSessionToServer();
+      if (gameOver) { reevaluateAfterCarreScoreChange([idx]); }
+      else { renderTable(); updateTurnIndicator(); }
+    });
+    showFxPopup('zut', `${p.name} : x + F + O`);
   }
 }
 
@@ -1739,10 +1851,121 @@ function checkCarreTurnStartEffects() {
   } else if (p.bonusDieNextTurn) {
     p.bonusDieNextTurn = false;
     renderTable();
-    showInfoPopup(`🎲 ${p.name} : tu as le droit à un dé bonus ce tour-ci !`, [
-      { label: 'OK' }
-    ]);
+    showFxPopup('bonus', `${p.name} : un dé supplémentaire ce tour-ci !`);
   }
+}
+
+// ═══════════════════════════════════════════
+// POPUPS ANIMÉS — dé magique 5 ("DÉ BONUS", fête) et 6 ("ZUT", animation inverse)
+// ═══════════════════════════════════════════
+let fxRaf = null, fxParticles = [], fxKind = null, fxAutoCloseTimer = null;
+let lastFxEventId = 0, lastFxEvent = null; // dernier popup affiché au maître, relayé aux spectateurs
+
+function fxNewParticle(canvas, initial) {
+  if (fxKind === 'bonus' || fxKind === 'plus500') {
+    const colors = ['#ffd700', '#ff8c00', '#ffffff', '#ffe066', '#ff6b9d', '#4dff91'];
+    return {
+      x: Math.random() * canvas.width,
+      y: initial ? -Math.random() * canvas.height * 0.5 : -10,
+      vx: (Math.random() - 0.5) * 1.5, vy: 1.5 + Math.random() * 2.5,
+      size: 4 + Math.random() * 5, color: colors[Math.floor(Math.random() * colors.length)],
+      rot: Math.random() * 360, vr: (Math.random() - 0.5) * 10, star: Math.random() < 0.3
+    };
+  }
+  return {
+    x: Math.random() * canvas.width,
+    y: initial ? canvas.height * (0.4 + Math.random() * 0.6) : canvas.height + 20,
+    vx: (Math.random() - 0.5) * 0.5, vy: -(0.7 + Math.random() * 1.1),
+    size: 18 + Math.random() * 16
+  };
+}
+
+function fxStar(ctx, r) {
+  ctx.beginPath();
+  for (let i = 0; i < 5; i++) {
+    ctx.lineTo(Math.cos((18 + i * 72) * Math.PI / 180) * r, -Math.sin((18 + i * 72) * Math.PI / 180) * r);
+    ctx.lineTo(Math.cos((54 + i * 72) * Math.PI / 180) * r * 0.4, -Math.sin((54 + i * 72) * Math.PI / 180) * r * 0.4);
+  }
+  ctx.closePath();
+  ctx.fill();
+}
+
+function fxLoop() {
+  const modal = document.getElementById('fx-modal');
+  if (!modal.classList.contains('open')) { fxRaf = null; return; }
+  const canvas = document.getElementById('fx-canvas');
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  if (Math.random() < ((fxKind === 'bonus' || fxKind === 'plus500') ? 0.7 : 0.12)) fxParticles.push(fxNewParticle(canvas, false));
+  fxParticles.forEach(p => {
+    p.x += p.vx; p.y += p.vy;
+    if (fxKind === 'bonus' || fxKind === 'plus500') {
+      p.rot += p.vr;
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.rotate(p.rot * Math.PI / 180);
+      ctx.fillStyle = p.color;
+      if (p.star) fxStar(ctx, p.size); else ctx.fillRect(-p.size / 2, -p.size / 3, p.size, p.size * 0.6);
+      ctx.restore();
+    } else {
+      ctx.save();
+      ctx.globalAlpha = Math.max(0, Math.min(0.6, p.y / canvas.height));
+      ctx.font = p.size + 'px serif';
+      ctx.fillText('💨', p.x, p.y);
+      ctx.restore();
+    }
+  });
+  fxParticles = fxParticles.filter(p => p.y > -60 && p.y < canvas.height + 60);
+  fxRaf = requestAnimationFrame(fxLoop);
+}
+
+function showFxPopup(kind, subText, remote) {
+  if (spectatorMode && !remote) return;
+  if (!spectatorMode) {
+    // Côté maître : on mémorise le popup et on l'envoie tout de suite aux spectateurs
+    lastFxEvent = { id: ++lastFxEventId, kind, sub: subText || '' };
+    pushLiveGameState();
+  }
+  const modal = document.getElementById('fx-modal');
+  const canvas = document.getElementById('fx-canvas');
+  const box = document.getElementById('fx-box');
+  const title = document.getElementById('fx-title');
+  document.getElementById('fx-sub').textContent = subText || '';
+  fxKind = kind;
+  if (kind === 'bonus' || kind === 'plus500') {
+    title.textContent = kind === 'plus500' ? '+500 !' : 'DÉ BONUS';
+    title.style.color = '#ffd700';
+    box.style.borderColor = '#ffd700';
+    modal.style.background = 'rgba(0,0,0,0.75)';
+  } else {
+    title.textContent = 'ZUT !';
+    title.style.color = '#ff6666';
+    box.style.borderColor = '#ff6666';
+    modal.style.background = 'rgba(25,0,0,0.88)';
+  }
+  modal.classList.add('open');
+  canvas.width = canvas.clientWidth || window.innerWidth;
+  canvas.height = canvas.clientHeight || window.innerHeight;
+  fxParticles = [];
+  const good = kind === 'bonus' || kind === 'plus500';
+  const burst = good ? 45 : 10;
+  for (let i = 0; i < burst; i++) fxParticles.push(fxNewParticle(canvas, true));
+  box.classList.remove('fx-pop', 'fx-shake');
+  void box.offsetWidth;
+  box.classList.add(good ? 'fx-pop' : 'fx-shake');
+  if (fxRaf) cancelAnimationFrame(fxRaf);
+  fxLoop();
+  // Côté spectateur le popup se ferme tout seul (pas de bouton à toucher pendant qu'on regarde)
+  if (fxAutoCloseTimer) clearTimeout(fxAutoCloseTimer);
+  fxAutoCloseTimer = remote ? setTimeout(closeFxPopup, 4500) : null;
+}
+
+function closeFxPopup() {
+  if (fxAutoCloseTimer) { clearTimeout(fxAutoCloseTimer); fxAutoCloseTimer = null; }
+  document.getElementById('fx-modal').classList.remove('open');
+  if (fxRaf) cancelAnimationFrame(fxRaf);
+  fxRaf = null;
+  fxParticles = [];
 }
 
 // Popup d'info générique (texte + boutons personnalisés)
@@ -1799,7 +2022,8 @@ function saveHistory() {
     players: players.map(p => ({...p})),
     sessionData: JSON.parse(JSON.stringify(sessionData)),
     turnScores: turnScores.map(t => [...t]),
-    currentTurn, currentPlayer, gameOver, finalRoundTrigger, lastActedPlayer,
+    currentTurn, currentPlayer, gameOver, finalRoundTrigger, lastActedPlayer, lastActedTurn,
+    penaltyRows: penaltyRows.map(r => ({ turn: r.turn, cells: [...r.cells], filled: r.filled ? [...r.filled] : undefined })),
   }));
 }
 
@@ -1814,8 +2038,11 @@ function undo() {
   gameOver = snap.gameOver;
   finalRoundTrigger = snap.finalRoundTrigger;
   lastActedPlayer = (snap.lastActedPlayer !== undefined) ? snap.lastActedPlayer : -1;
+  lastActedTurn = (snap.lastActedTurn !== undefined) ? snap.lastActedTurn : -1;
+  penaltyRows = snap.penaltyRows || [];
   document.getElementById('score-input').value = '';
   document.getElementById('winner-overlay').style.display = 'none';
+  saveSessionToServer(); // les F/O restaurés doivent aussi repartir vers le serveur
   scReset();
   renderTable();
   updateTurnIndicator();
@@ -1825,7 +2052,7 @@ function undo() {
 // ═══════════════════════════════════════════
 // WINNER
 // ═══════════════════════════════════════════
-async function showWinner(idx, exact) {
+async function showWinner(idx, exact, isCorrection) {
   const p = players[idx];
   heartRain();
 
@@ -1851,7 +2078,7 @@ async function showWinner(idx, exact) {
       yamGame: orig.yamCount || 0,
     };
   });
-  await recordGameStats(rankings);
+  await recordGameStats(rankings, isCorrection);
 
   document.getElementById('winner-text').textContent = `🏆 ${p.name} GAGNE !`;
   document.getElementById('winner-sub').textContent = exact
@@ -1961,9 +2188,59 @@ function normName(name) {
   return name.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 }
 
-async function recordGameStats(rankings) {
+// ── Correction de stats : une partie déjà enregistrée peut changer de vainqueur (carré de la
+// dernière chance joué après la fin) → on garde un "reçu" des stats AVANT l'enregistrement
+// pour pouvoir les remettre dans leur état d'origine puis ré-enregistrer le bon classement,
+// sans double comptage et sans toucher aux autres joueurs.
+let lastGameRecord = null; // { pre: { stats: {clé: entrée|null}, session: {clé: entrée|null} } }
+let statsOpChain = Promise.resolve();
+function queueStatsOp(fn) { const next = statsOpChain.then(fn, fn); statsOpChain = next.catch(() => {}); return next; }
+function cloneEntry(e) { return e ? JSON.parse(JSON.stringify(e)) : null; }
+function restoreRecordedGame(stats) {
+  if (!lastGameRecord) return;
+  Object.entries(lastGameRecord.pre.stats).forEach(([key, entry]) => {
+    if (entry) stats[key] = cloneEntry(entry); else delete stats[key];
+  });
+  Object.entries(lastGameRecord.pre.session).forEach(([key, entry]) => {
+    if (entry) sessionStats[key] = cloneEntry(entry);
+    else sessionStats[key] = { games: 0, wins: 0, bestScore: 0, worstScore: null, fTotal: 0, oTotal: 0, xTotal: 0,
+      fLastGame: 0, oLastGame: 0, xLastGame: 0, poopTotal: 0, poopLastGame: 0, causedPenalties: 0, perfectWins: 0,
+      bestTurn: 0, yamTotal: 0, displayName: (stats[key] && stats[key].displayName) || key };
+  });
+}
+function recordGameStats(rankings, isCorrection) { return queueStatsOp(() => doRecordGameStats(rankings, isCorrection)); }
+// Annule l'enregistrement de la partie (victoire remise en jeu par un carré)
+function cancelRecordedGame() {
+  return queueStatsOp(async () => {
+    if (!lastGameRecord) return;
+    await fetchStatsFromServer();
+    const stats = loadStats();
+    const rec = lastGameRecord;
+    restoreRecordedGame(stats);
+    lastGameRecord = null;
+    if (!statsOffline) {
+      for (const [key, entry] of Object.entries(rec.pre.stats)) {
+        if (!entry) { try { await fetch('/api/stats/' + encodeURIComponent(key), { method: 'DELETE' }); } catch(e) {} }
+      }
+    }
+    try {
+      await fetch('/api/session_stats', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(sessionStats) });
+    } catch(e) {}
+    await saveStats(stats);
+    await saveSessionToServer();
+  });
+}
+
+async function doRecordGameStats(rankings, isCorrection) {
   await fetchStatsFromServer();
   const stats = loadStats();
+  if (isCorrection) restoreRecordedGame(stats);
+  const pre = { stats: {}, session: {} };
+  rankings.forEach(r => {
+    const key = normName(r.realName || r.name);
+    pre.stats[key] = cloneEntry(stats[key]);
+    pre.session[key] = cloneEntry(sessionStats[key]);
+  });
 
   // Remettre à 0 les stats "Partie" pour les joueurs absents de cette partie
   const keysInGame = rankings.map(r => normName(r.realName || r.name));
@@ -2037,6 +2314,7 @@ async function recordGameStats(rankings) {
     ss.yamTotal = (ss.yamTotal || 0) + (r.yamGame || 0);
     ss.displayName = r.realName || r.name;
   });
+  lastGameRecord = { pre };
   try {
     await fetch('/api/session_stats', {
       method: 'POST',
@@ -2672,7 +2950,9 @@ let spectatorPollTimer = null;
 let spectatorViewerId = null;
 let spectatorEnded = false;
 let spectatorWinnerShown = false;
+let spectatorWinnerKey = '';
 let spectatorLastPoopCount = -1; // -1 = pas encore initialisé, évite une pluie de 💩 parasite au 1er chargement
+let spectatorLastFxId = -1;
 let spectatorLastEventId = -1;   // -1 = pas encore initialisé, évite de rejouer tout l'historique au 1er chargement
 let spectatorPrevGameOver = false; // dernier état connu — sert à détecter la transition "terminée → nouvelle partie"
 
@@ -2736,8 +3016,10 @@ async function pollSpectator(key) {
     if (spectatorPrevGameOver && !data.gameOver) {
       spectatorEnded = false;
       spectatorWinnerShown = false;
+      spectatorWinnerKey = '';
       spectatorLastPoopCount = -1;
       spectatorLastEventId = -1;
+      spectatorLastFxId = -1;
       document.getElementById('winner-overlay').style.display = 'none';
       const banner = document.getElementById('spectator-banner');
       banner.style.background = '#1a0a2e';
@@ -2752,7 +3034,13 @@ async function pollSpectator(key) {
     const vc = document.getElementById('spectator-viewer-count');
     if (vc) vc.textContent = formatViewerCount(viewerCount);
 
-    await fetchSessionFromServer(); // pour afficher les lignes F/O comme chez le maître
+    // F/O : lus dans le même message que le reste de l'état (cohérent, sans course entre deux requêtes).
+    // Repli sur le serveur si le maître n'envoie pas (encore) ces données.
+    if (data.sessionData && Object.keys(data.sessionData).length > 0) {
+      sessionData = data.sessionData;
+    } else {
+      await fetchSessionFromServer();
+    }
 
     players = data.players || [];
     turnScores = data.turnScores || [];
@@ -2762,6 +3050,7 @@ async function pollSpectator(key) {
     finalRoundTrigger = (data.finalRoundTrigger !== undefined) ? data.finalRoundTrigger : -1;
     history = data.history || [];
     gamePoopCount = data.gamePoopCount || 0;
+    penaltyRows = data.penaltyRows || [];
 
     // Pluie de 💩 si un nouveau -500 a été appliqué depuis le dernier rafraîchissement
     if (spectatorLastPoopCount === -1) {
@@ -2785,9 +3074,21 @@ async function pollSpectator(key) {
       }
     }
 
+    // Popups animés du dé magique (DÉ BONUS / ZUT) : on les rejoue chez le spectateur
+    if (data.lastFx && data.lastFx.id) {
+      if (spectatorLastFxId === -1) {
+        spectatorLastFxId = data.lastFx.id; // pas de rejeu de l'historique au premier chargement
+      } else if (data.lastFx.id > spectatorLastFxId) {
+        spectatorLastFxId = data.lastFx.id;
+        showFxPopup(data.lastFx.kind, data.lastFx.sub, true);
+      }
+    }
+
     // Annonce du gagnant + pluie de cœurs, une seule fois
-    if (gameOver && data.winner && !spectatorWinnerShown) {
+    const winnerKey = data.winner ? `${data.winner.name}|${data.winner.total}|${data.winner.exact ? 1 : 0}` : '';
+    if (gameOver && data.winner && (!spectatorWinnerShown || winnerKey !== spectatorWinnerKey)) {
       spectatorWinnerShown = true;
+      spectatorWinnerKey = winnerKey;
       heartRain();
       document.getElementById('winner-text').textContent = `🏆 ${data.winner.name} GAGNE !`;
       document.getElementById('winner-sub').textContent = data.winner.exact
